@@ -1,17 +1,36 @@
+import configparser
+
+from openai import AzureOpenAI, OpenAI
+
 from voyager import Voyager
 
-# You can also use mc_port instead of azure_login, but azure_login is highly recommended
+# Load configuration from INI file
+config = configparser.ConfigParser()
+config.read("config.ini")
+
 azure_login = {
-    "client_id": "1f118a64-7c94-4ee0-8537-0c844b91b97b",
-    "redirect_url": "https://127.0.0.1/auth-response",
-    "secret_value": "",
-    "version": "fabric-loader-0.14.18-1.19",
+    "client_id": config.get("azure_login", "client_id"),
+    "redirect_url": config.get("azure_login", "redirect_url"),
+    "secret_value": config.get("azure_login", "secret_value"),
+    "version": config.get("azure_login", "version"),
 }
-openai_api_key = "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"
+
+gpt4_client = AzureOpenAI(
+    azure_endpoint=config.get("gpt4_client", "azure_endpoint"),
+    azure_deployment=config.get("gpt4_client", "azure_deployment"),
+    api_key=config.get("gpt4_client", "api_key"),
+    api_version=config.get("gpt4_client", "api_version"),
+)
+
+gpt35_client = OpenAI(
+    api_key=config.get("gpt35_client", "api_key"),
+    model=config.get("gpt35_client", "model"),
+)
 
 voyager = Voyager(
     azure_login=azure_login,
-    openai_api_key=openai_api_key,
+    gpt35_client=gpt35_client,
+    gpt4_client=gpt4_client,
 )
 
 # start lifelong learning

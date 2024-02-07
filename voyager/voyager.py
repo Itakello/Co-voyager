@@ -1,20 +1,18 @@
 import copy
-import json
 import os
 import time
 from typing import Dict
 
+from openai import AzureOpenAI, OpenAI
+
 import voyager.utils as U
+
+from .agents import ActionAgent, CriticAgent, CurriculumAgent, SkillManager
 from .env import VoyagerEnv
 
-from .agents import ActionAgent
-from .agents import CriticAgent
-from .agents import CurriculumAgent
-from .agents import SkillManager
 
-
-# TODO: remove event memory
 class Voyager:
+
     def __init__(
         self,
         mc_port: int = None,
@@ -293,23 +291,14 @@ class Voyager:
         return messages, reward, done, info
 
     def learn(self, reset_env=True):
-        if self.resume:
-            # keep the inventory
-            self.env.reset(
-                options={
-                    "mode": "soft",
-                    "wait_ticks": self.env_wait_ticks,
-                }
-            )
-        else:
-            # clear the inventory
-            self.env.reset(
-                options={
-                    "mode": "hard",
-                    "wait_ticks": self.env_wait_ticks,
-                }
-            )
-            self.resume = True
+        reset_mode = "soft" if self.resume else "hard"
+        self.env.reset(
+            options={
+                "mode": reset_mode,
+                "wait_ticks": self.env_wait_ticks,
+            }
+        )
+        self.resume = True
         self.last_events = self.env.step("")
 
         while True:
@@ -325,7 +314,7 @@ class Voyager:
                 f"\033[35mStarting task {task} for at most {self.action_agent_task_max_retries} times\033[0m"
             )
             try:
-                messages, reward, done, info = self.rollout(
+                _, _, _, info = self.rollout(
                     task=task,
                     context=context,
                     reset_env=reset_env,

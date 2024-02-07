@@ -1,14 +1,14 @@
 import re
 import time
 
-import voyager.utils as U
 from javascript import require
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts import SystemMessagePromptTemplate
 from langchain.schema import AIMessage, HumanMessage, SystemMessage
 
-from voyager.prompts import load_prompt
+import voyager.utils as U
 from voyager.control_primitives_context import load_control_primitives_context
+from voyager.prompts import load_prompt
 
 
 class ActionAgent:
@@ -49,7 +49,9 @@ class ActionAgent:
                     self.chest_memory.pop(position)
             else:
                 if chest != "Invalid":
-                    print(f"\033[32mAction Agent saving chest {position}: {chest}\033[0m")
+                    print(
+                        f"\033[32mAction Agent saving chest {position}: {chest}\033[0m"
+                    )
                     self.chest_memory[position] = chest
         U.dump_json(self.chest_memory, f"{self.ckpt_dir}/action/chest_memory.json")
 
