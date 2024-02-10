@@ -1,9 +1,6 @@
 import copy
-import os
 import time
 from typing import Dict
-
-from openai import AzureOpenAI, OpenAI
 
 import voyager.utils as U
 
@@ -372,7 +369,7 @@ class Voyager:
             print(
                 f"\033[35mStarting task {next_task} for at most {self.action_agent_task_max_retries} times\033[0m"
             )
-            messages, reward, done, info = self.rollout(
+            _, _, _, info = self.rollout(
                 task=next_task,
                 context=context,
                 reset_env=reset_env,
