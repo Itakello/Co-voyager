@@ -1,4 +1,3 @@
-import os
 import pathlib
 import pkg_resources
 from setuptools import setup, find_packages

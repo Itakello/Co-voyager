@@ -1,6 +1,5 @@
 import configparser
-
-from openai import AzureOpenAI, OpenAI
+import os
 
 from voyager import Voyager
 
@@ -15,23 +14,12 @@ azure_login = {
     "version": config.get("azure_login", "version"),
 }
 
-gpt4_client = AzureOpenAI(
-    azure_endpoint=config.get("gpt4_client", "azure_endpoint"),
-    azure_deployment=config.get("gpt4_client", "azure_deployment"),
-    api_key=config.get("gpt4_client", "api_key"),
-    api_version=config.get("gpt4_client", "api_version"),
-)
+os.environ["OPENAI_API_VERSION"] = config.get("gpt4_client", "api_version")
+os.environ["OPENAI_API_KEY"] = config.get("gpt35_client", "api_key")
+os.environ["AZURE_OPENAI_ENDPOINT"] = config.get("gpt4_client", "azure_endpoint")
+os.environ["AZURE_OPENAI_API_KEY"] = config.get("gpt4_client", "api_key")
 
-gpt35_client = OpenAI(
-    api_key=config.get("gpt35_client", "api_key"),
-    model=config.get("gpt35_client", "model"),
-)
-
-voyager = Voyager(
-    azure_login=azure_login,
-    gpt35_client=gpt35_client,
-    gpt4_client=gpt4_client,
-)
+voyager = Voyager(azure_login=azure_login)
 
 # start lifelong learning
 voyager.learn()
