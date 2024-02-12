@@ -19,7 +19,11 @@ os.environ["OPENAI_API_KEY"] = config.get("gpt35_client", "api_key")
 os.environ["AZURE_OPENAI_ENDPOINT"] = config.get("gpt4_client", "azure_endpoint")
 os.environ["AZURE_OPENAI_API_KEY"] = config.get("gpt4_client", "api_key")
 
-voyager = Voyager(azure_login=azure_login)
+voyager = Voyager(
+    azure_login=azure_login,
+    curriculum_agent_mode="manual",
+    critic_agent_mode="manual",
+    resume=True,
+)
 
-# start lifelong learning
 voyager.learn()

@@ -130,12 +130,116 @@ class CurriculumAgent:
     def progress(self):
         return len(self.completed_tasks)
 
-    def render_system_message(self):
+    def propose_next_task(self, *, events, chest_observation, max_retries=5):
+        if self.progress == 0 and self.mode == "auto":
+            task = "Mine 1 wood log"
+            context = "You can mine one of oak, birch, spruce, jungle, acacia, dark oak, or mangrove logs."
+            return task, context
+
+        # hard code task when inventory is almost full
+        inventoryUsed = events[-1][1]["status"]["inventoryUsed"]
+        if inventoryUsed >= 33:
+            if chest_observation != "Chests: None\n\n":
+                chests = chest_observation[8:-2].split("\n")
+                for chest in chests:
+                    content = chest.split(":")[1]
+                    if content == " Unknown items inside" or content == " Empty":
+                        position = chest.split(":")[0]
+                        task = f"Deposit useless items into the chest at {position}"
+                        context = (
+                            f"Your inventory have {inventoryUsed} occupied slots before depositing. "
+                            "After depositing, your inventory should only have 20 occupied slots. "
+                            "You should deposit useless items such as andesite, dirt, cobblestone, etc. "
+                            "Also, you can deposit low-level tools, "
+                            "For example, if you have a stone pickaxe, you can deposit a wooden pickaxe. "
+                            "Make sure the list of useless items are in your inventory "
+                            "(do not list items already in the chest), "
+                            "You can use bot.inventoryUsed() to check how many inventory slots are used."
+                        )
+                        return task, context
+            if "chest" in events[-1][1]["inventory"]:
+                task = "Place a chest"
+                context = (
+                    f"You have a chest in inventory, place it around you. "
+                    f"If chests is not None, or nearby blocks contains chest, this task is success."
+                )
+            else:
+                task = "Craft 1 chest"
+                context = "Craft 1 chest with 8 planks of any kind of wood."
+            return task, context
+
+        messages = [
+            self._render_system_message(),
+            self._render_human_message(
+                events=events, chest_observation=chest_observation
+            ),
+        ]
+
+        if self.mode == "auto":
+            return self._propose_next_ai_task(
+                messages=messages, max_retries=max_retries
+            )
+        elif self.mode == "manual":
+            return self._propose_next_manual_task()
+        else:
+            raise ValueError(f"Invalid curriculum agent mode: {self.mode}")
+
+    def decompose_task(self, task, events):
+        messages = [
+            SystemMessage(
+                content=load_prompt("curriculum_task_decomposition"),
+            ),
+            self._render_human_message(events=events, chest_observation=""),
+            HumanMessage(content=f"Final task: {task}"),
+        ]
+        response = self.llm.invoke(messages).content
+        print(
+            f"\033[31m****Curriculum Agent task decomposition****\nFinal task: {task}\nSubtasks: {response}\033[0m"
+        )
+        return fix_and_parse_json(response)
+
+    def get_task_context(self, task):
+        # if include ore in question, gpt will try to use tool with skill touch enhancement to mine
+        question = (
+            f"How to {task.replace('_', ' ').replace(' ore', '').replace(' ores', '').replace('.', '').strip().lower()}"
+            f" in Minecraft?"
+        )
+        if question in self.qa_cache:
+            answer = self.qa_cache[question]
+        else:
+            answer = self._run_qa_step2_answer_questions(question=question)
+            self.qa_cache[question] = answer
+            self.qa_cache_questions_vectordb.add_texts(
+                texts=[question],
+            )
+            U.dump_json(self.qa_cache, f"{self.ckpt_dir}/curriculum/qa_cache.json")
+            self.qa_cache_questions_vectordb.persist()
+        context = f"Question: {question}\n{answer}"
+        return context
+
+    def update_exploration_progress(self, info):
+        task = info["task"]
+        if task.startswith("Deposit useless items into the chest at"):
+            # No need to record the deposit task
+            return
+        if info["success"]:
+            print(f"\033[35mCompleted task {task}.\033[0m")
+            self.completed_tasks.append(task)
+        else:
+            print(
+                f"\033[35mFailed to complete task {task}. Skipping to next task.\033[0m"
+            )
+            self.failed_tasks.append(task)
+
+        # clean up tasks and dump to disk
+        self._clean_up_tasks()
+
+    def _render_system_message(self):
         system_message = SystemMessage(content=load_prompt("curriculum"))
         assert isinstance(system_message, SystemMessage)
         return system_message
 
-    def render_observation(self, *, events, chest_observation):
+    def _render_observation(self, *, events, chest_observation):
         assert events[-1][0] == "observe", "Last event must be observe"
         event = events[-1][1]
         biome = event["status"]["biome"]
@@ -205,13 +309,13 @@ class CurriculumAgent:
         }
         return observation
 
-    def render_human_message(self, *, events, chest_observation):
+    def _render_human_message(self, *, events, chest_observation):
         content = ""
-        observation = self.render_observation(
+        observation = self._render_observation(
             events=events, chest_observation=chest_observation
         )
         if self.progress >= self.warm_up["context"]:
-            questions, answers = self.run_qa(
+            questions, answers = self._run_qa(
                 events=events, chest_observation=chest_observation
             )
             i = 1
@@ -236,65 +340,13 @@ class CurriculumAgent:
         print(f"\033[35m****Curriculum Agent human message****\n{content}\033[0m")
         return HumanMessage(content=content)
 
-    def propose_next_task(self, *, events, chest_observation, max_retries=5):
-        if self.progress == 0 and self.mode == "auto":
-            task = "Mine 1 wood log"
-            context = "You can mine one of oak, birch, spruce, jungle, acacia, dark oak, or mangrove logs."
-            return task, context
-
-        # hard code task when inventory is almost full
-        inventoryUsed = events[-1][1]["status"]["inventoryUsed"]
-        if inventoryUsed >= 33:
-            if chest_observation != "Chests: None\n\n":
-                chests = chest_observation[8:-2].split("\n")
-                for chest in chests:
-                    content = chest.split(":")[1]
-                    if content == " Unknown items inside" or content == " Empty":
-                        position = chest.split(":")[0]
-                        task = f"Deposit useless items into the chest at {position}"
-                        context = (
-                            f"Your inventory have {inventoryUsed} occupied slots before depositing. "
-                            "After depositing, your inventory should only have 20 occupied slots. "
-                            "You should deposit useless items such as andesite, dirt, cobblestone, etc. "
-                            "Also, you can deposit low-level tools, "
-                            "For example, if you have a stone pickaxe, you can deposit a wooden pickaxe. "
-                            "Make sure the list of useless items are in your inventory "
-                            "(do not list items already in the chest), "
-                            "You can use bot.inventoryUsed() to check how many inventory slots are used."
-                        )
-                        return task, context
-            if "chest" in events[-1][1]["inventory"]:
-                task = "Place a chest"
-                context = (
-                    f"You have a chest in inventory, place it around you. "
-                    f"If chests is not None, or nearby blocks contains chest, this task is success."
-                )
-            else:
-                task = "Craft 1 chest"
-                context = "Craft 1 chest with 8 planks of any kind of wood."
-            return task, context
-
-        messages = [
-            self.render_system_message(),
-            self.render_human_message(
-                events=events, chest_observation=chest_observation
-            ),
-        ]
-
-        if self.mode == "auto":
-            return self.propose_next_ai_task(messages=messages, max_retries=max_retries)
-        elif self.mode == "manual":
-            return self.propose_next_manual_task()
-        else:
-            raise ValueError(f"Invalid curriculum agent mode: {self.mode}")
-
-    def propose_next_ai_task(self, *, messages, max_retries=5):
+    def _propose_next_ai_task(self, *, messages, max_retries=5):
         if max_retries == 0:
             raise RuntimeError("Max retries reached, failed to propose ai task.")
         curriculum = self.llm.invoke(messages).content
         print(f"\033[31m****Curriculum Agent ai message****\n{curriculum}\033[0m")
         try:
-            response = self.parse_ai_message(curriculum)
+            response = self._parse_ai_message(curriculum)
             assert "next_task" in response
             context = self.get_task_context(response["next_task"])
             return response["next_task"], context
@@ -302,12 +354,12 @@ class CurriculumAgent:
             print(
                 f"\033[35mError parsing curriculum response: {e}. Trying again!\033[0m"
             )
-            return self.propose_next_ai_task(
+            return self._propose_next_ai_task(
                 messages=messages,
                 max_retries=max_retries - 1,
             )
 
-    def parse_ai_message(self, message):
+    def _parse_ai_message(self, message):
         task = ""
         for line in message.split("\n"):
             if line.startswith("Task:"):
@@ -315,7 +367,7 @@ class CurriculumAgent:
         assert task, "Task not found in Curriculum Agent response"
         return {"next_task": task}
 
-    def propose_next_manual_task(self):
+    def _propose_next_manual_task(self):
         confirmed = False
         task, context = "", ""
         while not confirmed:
@@ -325,24 +377,7 @@ class CurriculumAgent:
             confirmed = input("Confirm? (y/n)").lower() in ["y", ""]
         return task, context
 
-    def update_exploration_progress(self, info):
-        task = info["task"]
-        if task.startswith("Deposit useless items into the chest at"):
-            # No need to record the deposit task
-            return
-        if info["success"]:
-            print(f"\033[35mCompleted task {task}.\033[0m")
-            self.completed_tasks.append(task)
-        else:
-            print(
-                f"\033[35mFailed to complete task {task}. Skipping to next task.\033[0m"
-            )
-            self.failed_tasks.append(task)
-
-        # clean up tasks and dump to disk
-        self.clean_up_tasks()
-
-    def clean_up_tasks(self):
+    def _clean_up_tasks(self):
         updated_completed_tasks = []
         # record repeated failed tasks
         updated_failed_tasks = self.failed_tasks
@@ -365,23 +400,8 @@ class CurriculumAgent:
         )
         U.dump_json(self.failed_tasks, f"{self.ckpt_dir}/curriculum/failed_tasks.json")
 
-    def decompose_task(self, task, events):
-        messages = [
-            SystemMessage(
-                content=load_prompt("curriculum_task_decomposition"),
-            ),
-            self.render_human_message(events=events, chest_observation=""),
-            HumanMessage(content=f"Final task: {task}"),
-        ]
-        print(
-            f"\033[31m****Curriculum Agent task decomposition****\nFinal task: {task}\033[0m"
-        )
-        response = self.llm.invoke(messages).content
-        print(f"\033[31m****Curriculum Agent task decomposition****\n{response}\033[0m")
-        return fix_and_parse_json(response)
-
-    def run_qa(self, *, events, chest_observation):
-        questions_new, _ = self.run_qa_step1_ask_questions(
+    def _run_qa(self, *, events, chest_observation):
+        questions_new, _ = self._run_qa_step1_ask_questions(
             events=events, chest_observation=chest_observation
         )
         questions = []
@@ -400,7 +420,7 @@ class CurriculumAgent:
                     questions.append(question_cached)
                     answers.append(answer_cached)
                     continue
-            answer = self.run_qa_step2_answer_questions(question=question)
+            answer = self._run_qa_step2_answer_questions(question=question)
             assert question not in self.qa_cache
             self.qa_cache[question] = answer
             self.qa_cache_questions_vectordb.add_texts(
@@ -413,30 +433,13 @@ class CurriculumAgent:
         assert len(questions_new) == len(questions) == len(answers)
         return questions, answers
 
-    def get_task_context(self, task):
-        # if include ore in question, gpt will try to use tool with skill touch enhancement to mine
-        question = (
-            f"How to {task.replace('_', ' ').replace(' ore', '').replace(' ores', '').replace('.', '').strip().lower()}"
-            f" in Minecraft?"
-        )
-        if question in self.qa_cache:
-            answer = self.qa_cache[question]
-        else:
-            answer = self.run_qa_step2_answer_questions(question=question)
-            self.qa_cache[question] = answer
-            self.qa_cache_questions_vectordb.add_texts(
-                texts=[question],
-            )
-            U.dump_json(self.qa_cache, f"{self.ckpt_dir}/curriculum/qa_cache.json")
-            self.qa_cache_questions_vectordb.persist()
-        context = f"Question: {question}\n{answer}"
-        return context
-
-    def render_system_message_qa_step1_ask_questions(self):
+    def _render_system_message_qa_step1_ask_questions(self):
         return SystemMessage(content=load_prompt("curriculum_qa_step1_ask_questions"))
 
-    def render_human_message_qa_step1_ask_questions(self, *, events, chest_observation):
-        observation = self.render_observation(
+    def _render_human_message_qa_step1_ask_questions(
+        self, *, events, chest_observation
+    ):
+        observation = self._render_observation(
             events=events, chest_observation=chest_observation
         )
         content = ""
@@ -444,7 +447,7 @@ class CurriculumAgent:
             content += observation[key]
         return HumanMessage(content=content)
 
-    def run_qa_step1_ask_questions(self, *, events, chest_observation):
+    def _run_qa_step1_ask_questions(self, *, events, chest_observation):
         biome = events[-1][1]["status"]["biome"].replace("_", " ")
         questions = [
             f"What are the blocks that I can find in the {biome} in Minecraft?",
@@ -453,8 +456,8 @@ class CurriculumAgent:
         ]
         concepts = [biome, biome, biome]
         messages = [
-            self.render_system_message_qa_step1_ask_questions(),
-            self.render_human_message_qa_step1_ask_questions(
+            self._render_system_message_qa_step1_ask_questions(),
+            self._render_human_message_qa_step1_ask_questions(
                 events=events, chest_observation=chest_observation
             ),
         ]
@@ -477,19 +480,19 @@ class CurriculumAgent:
             )
         return questions, concepts
 
-    def render_system_message_qa_step2_answer_questions(self):
+    def _render_system_message_qa_step2_answer_questions(self):
         return SystemMessage(
             content=load_prompt("curriculum_qa_step2_answer_questions")
         )
 
-    def render_human_message_qa_step2_answer_questions(self, question):
+    def _render_human_message_qa_step2_answer_questions(self, question):
         content = f"Question: {question}"
         return HumanMessage(content=content)
 
-    def run_qa_step2_answer_questions(self, question):
+    def _run_qa_step2_answer_questions(self, question):
         messages = [
-            self.render_system_message_qa_step2_answer_questions(),
-            self.render_human_message_qa_step2_answer_questions(question=question),
+            self._render_system_message_qa_step2_answer_questions(),
+            self._render_human_message_qa_step2_answer_questions(question=question),
         ]
         print(f"\033[35mCurriculum Agent Question: {question}\033[0m")
         qa_answer = self.qa_llm.invoke(messages).content

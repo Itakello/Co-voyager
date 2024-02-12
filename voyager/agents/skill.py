@@ -62,7 +62,7 @@ class SkillManager:
             return
         program_name = info["program_name"]
         program_code = info["program_code"]
-        skill_description = self.generate_skill_description(program_name, program_code)
+        skill_description = self._generate_skill_description(program_name, program_code)
         print(
             f"\033[33mSkill Manager generated description for {program_name}:\n{skill_description}\033[0m"
         )
@@ -97,18 +97,6 @@ class SkillManager:
         U.dump_json(self.skills, f"{self.ckpt_dir}/skill/skills.json")
         self.vectordb.persist()
 
-    def generate_skill_description(self, program_name, program_code):
-        messages = [
-            SystemMessage(content=load_prompt("skill")),
-            HumanMessage(
-                content=program_code
-                + "\n\n"
-                + f"The main function is `{program_name}`."
-            ),
-        ]
-        skill_description = f"    // { self.llm.invoke(messages).content}"
-        return f"async function {program_name}(bot) {{\n{skill_description}\n}}"
-
     def retrieve_skills(self, query):
         k = min(self.vectordb._collection.count(), self.retrieval_top_k)
         if k == 0:
@@ -123,3 +111,15 @@ class SkillManager:
         for doc, _ in docs_and_scores:
             skills.append(self.skills[doc.metadata["name"]]["code"])
         return skills
+
+    def _generate_skill_description(self, program_name, program_code):
+        messages = [
+            SystemMessage(content=load_prompt("skill")),
+            HumanMessage(
+                content=program_code
+                + "\n\n"
+                + f"The main function is `{program_name}`."
+            ),
+        ]
+        skill_description = f"    // { self.llm.invoke(messages).content}"
+        return f"async function {program_name}(bot) {{\n{skill_description}\n}}"

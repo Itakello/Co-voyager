@@ -21,11 +21,35 @@ class CriticAgent:
         assert mode in ["auto", "manual"]
         self.mode = mode
 
-    def render_system_message(self):
+    def check_task_success(
+        self, *, events, task, context, chest_observation, max_retries=5
+    ):
+        human_message = self._render_human_message(
+            events=events,
+            task=task,
+            context=context,
+            chest_observation=chest_observation,
+        )
+
+        messages = [
+            self._render_system_message(),
+            human_message,
+        ]
+
+        if self.mode == "manual":
+            return self._human_check_task_success()
+        elif self.mode == "auto":
+            return self._ai_check_task_success(
+                messages=messages, max_retries=max_retries
+            )
+        else:
+            raise ValueError(f"Invalid critic agent mode: {self.mode}")
+
+    def _render_system_message(self):
         system_message = SystemMessage(content=load_prompt("critic"))
         return system_message
 
-    def render_human_message(self, *, events, task, context, chest_observation):
+    def _render_human_message(self, *, events, task, context, chest_observation):
         assert events[-1][0] == "observe", "Last event must be observe"
         biome = events[-1][1]["status"]["biome"]
         time_of_day = events[-1][1]["status"]["timeOfDay"]
@@ -77,7 +101,7 @@ class CriticAgent:
         print(f"\033[31m****Critic Agent human message****\n{observation}\033[0m")
         return HumanMessage(content=observation)
 
-    def human_check_task_success(self):
+    def _human_check_task_success(self):
         confirmed = False
         success = False
         critique = ""
@@ -89,7 +113,7 @@ class CriticAgent:
             confirmed = input("Confirm? (y/n)") in ["y", ""]
         return success, critique
 
-    def ai_check_task_success(self, messages, max_retries=5):
+    def _ai_check_task_success(self, messages, max_retries=5):
         if max_retries == 0:
             print(
                 "\033[31mFailed to parse Critic Agent response. Consider updating your prompt.\033[0m"
@@ -109,31 +133,7 @@ class CriticAgent:
             return response["success"], response["critique"]
         except Exception as e:
             print(f"\033[31mError parsing critic response: {e} Trying again!\033[0m")
-            return self.ai_check_task_success(
+            return self._ai_check_task_success(
                 messages=messages,
                 max_retries=max_retries - 1,
             )
-
-    def check_task_success(
-        self, *, events, task, context, chest_observation, max_retries=5
-    ):
-        human_message = self.render_human_message(
-            events=events,
-            task=task,
-            context=context,
-            chest_observation=chest_observation,
-        )
-
-        messages = [
-            self.render_system_message(),
-            human_message,
-        ]
-
-        if self.mode == "manual":
-            return self.human_check_task_success()
-        elif self.mode == "auto":
-            return self.ai_check_task_success(
-                messages=messages, max_retries=max_retries
-            )
-        else:
-            raise ValueError(f"Invalid critic agent mode: {self.mode}")

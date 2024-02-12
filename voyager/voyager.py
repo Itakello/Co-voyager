@@ -263,15 +263,15 @@ class Voyager:
             print(
                 f"\033[32m****Action Agent human message****\n{self.messages[-1].content}\033[0m"
             )
-        return self.messages, 0, done, info
+        return done, info
 
     def rollout(self, *, task, context, reset_env=True):
         self.reset(task=task, context=context, reset_env=reset_env)
         while True:
-            messages, reward, done, info = self.step()
+            done, info = self.step()
             if done:
                 break
-        return messages, reward, done, info
+        return info
 
     def learn(self, reset_env=True):
         reset_mode = "soft" if self.resume else "hard"
@@ -297,7 +297,7 @@ class Voyager:
                 f"\033[35mStarting task {task} for at most {self.action_agent_task_max_retries} times\033[0m"
             )
             try:
-                _, _, _, info = self.rollout(
+                info = self.rollout(
                     task=task,
                     context=context,
                     reset_env=reset_env,
@@ -369,7 +369,7 @@ class Voyager:
             print(
                 f"\033[35mStarting task {next_task} for at most {self.action_agent_task_max_retries} times\033[0m"
             )
-            _, _, _, info = self.rollout(
+            info = self.rollout(
                 task=next_task,
                 context=context,
                 reset_env=reset_env,
