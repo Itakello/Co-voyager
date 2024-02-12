@@ -7,7 +7,7 @@ voyager = Voyager(
     azure_login=get_azure_login(),
     curriculum_agent_mode="manual",
     critic_agent_mode="manual",
-    resume=True,
+    resume=False,
 )
 
 voyager.learn()
