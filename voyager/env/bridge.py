@@ -1,12 +1,11 @@
+import json
 import os.path
 import time
 import warnings
-from typing import SupportsFloat, Any, Tuple, Dict
-
-import requests
-import json
+from typing import Any, Dict, SupportsFloat, Tuple
 
 import gymnasium as gym
+import requests
 from gymnasium.core import ObsType
 
 import voyager.utils as U
@@ -20,7 +19,9 @@ class VoyagerEnv(gym.Env):
         self,
         mc_port=None,
         azure_login=None,
+        wait_ticks=25,
         server_host="http://127.0.0.1",
+        max_iteractions=160,
         server_port=3000,
         request_timeout=600,
         log_path="./logs",
@@ -35,7 +36,9 @@ class VoyagerEnv(gym.Env):
         self.azure_login = azure_login
         self.server = f"{server_host}:{server_port}"
         self.server_port = server_port
+        self.max_iteractions = max_iteractions
         self.request_timeout = request_timeout
+        self.wait_ticks = wait_ticks
         self.log_path = log_path
         self.mineflayer = self.get_mineflayer_process(server_port)
         if azure_login:
@@ -145,7 +148,7 @@ class VoyagerEnv(gym.Env):
             "inventory": options.get("inventory", {}),
             "equipment": options.get("equipment", []),
             "spread": options.get("spread", False),
-            "waitTicks": options.get("wait_ticks", 5),
+            "waitTicks": self.wait_ticks,
             "position": options.get("position", None),
         }
 

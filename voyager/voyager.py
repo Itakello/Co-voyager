@@ -1,6 +1,5 @@
 import copy
 import time
-from typing import Dict
 
 import voyager.utils as U
 
@@ -12,131 +11,21 @@ class Voyager:
 
     def __init__(
         self,
-        mc_port: int = None,
-        azure_login: Dict[str, str] = None,
-        server_port: int = 3000,
-        env_wait_ticks: int = 20,
-        env_request_timeout: int = 600,
-        max_iterations: int = 160,
-        reset_placed_if_failed: bool = False,
-        action_agent_temperature: float = 0,
-        action_agent_task_max_retries: int = 4,
-        action_agent_show_chat_log: bool = True,
-        action_agent_show_execution_error: bool = True,
-        curriculum_agent_temperature: float = 0,
-        curriculum_agent_qa_temperature: float = 0,
-        curriculum_agent_warm_up: Dict[str, int] = None,
-        curriculum_agent_core_inventory_items: str = r".*_log|.*_planks|stick|crafting_table|furnace"
-        r"|cobblestone|dirt|coal|.*_pickaxe|.*_sword|.*_axe",
-        curriculum_agent_mode: str = "auto",
-        critic_agent_temperature: float = 0,
-        critic_agent_mode: str = "auto",
-        skill_manager_temperature: float = 0,
-        skill_manager_retrieval_top_k: int = 5,
-        openai_api_request_timeout: int = 240,
-        ckpt_dir: str = "ckpt",
-        skill_library_dir: str = None,
-        resume: bool = False,
+        env: VoyagerEnv,
+        action_agent: ActionAgent,
+        curriculum_agent: CurriculumAgent,
+        critic_agent: CriticAgent,
+        skill_manager: SkillManager,
+        recorder: U.EventRecorder,
     ):
-        """
-        The main class for Voyager.
-        Action agent is the iterative prompting mechanism in paper.
-        Curriculum agent is the automatic curriculum in paper.
-        Critic agent is the self-verification in paper.
-        Skill manager is the skill library in paper.
-        :param mc_port: minecraft in-game port
-        :param azure_login: minecraft login config
-        :param server_port: mineflayer port
-        :param openai_api_key: openai api key
-        :param env_wait_ticks: how many ticks at the end each step will wait, if you found some chat log missing,
-        you should increase this value
-        :param env_request_timeout: how many seconds to wait for each step, if the code execution exceeds this time,
-        python side will terminate the connection and need to be resumed
-        :param reset_placed_if_failed: whether to reset placed blocks if failed, useful for building task
-        :param action_agent_model_name: action agent model name
-        :param action_agent_temperature: action agent temperature
-        :param action_agent_task_max_retries: how many times to retry if failed
-        :param curriculum_agent_model_name: curriculum agent model name
-        :param curriculum_agent_temperature: curriculum agent temperature
-        :param curriculum_agent_qa_model_name: curriculum agent qa model name
-        :param curriculum_agent_qa_temperature: curriculum agent qa temperature
-        :param curriculum_agent_warm_up: info will show in curriculum human message
-        if completed task larger than the value in dict, available keys are:
-        {
-            "context": int,
-            "biome": int,
-            "time": int,
-            "other_blocks": int,
-            "nearby_entities": int,
-            "health": int,
-            "hunger": int,
-            "position": int,
-            "equipment": int,
-            "chests": int,
-            "optional_inventory_items": int,
-        }
-        :param curriculum_agent_core_inventory_items: only show these items in inventory before optional_inventory_items
-        reached in warm up
-        :param curriculum_agent_mode: "auto" for automatic curriculum, "manual" for human curriculum
-        :param critic_agent_model_name: critic agent model name
-        :param critic_agent_temperature: critic agent temperature
-        :param critic_agent_mode: "auto" for automatic critic ,"manual" for human critic
-        :param skill_manager_model_name: skill manager model name
-        :param skill_manager_temperature: skill manager temperature
-        :param skill_manager_retrieval_top_k: how many skills to retrieve for each task
-        :param openai_api_request_timeout: how many seconds to wait for openai api
-        :param ckpt_dir: checkpoint dir
-        :param skill_library_dir: skill library dir
-        :param resume: whether to resume from checkpoint
-        """
-        # init env
-        self.env = VoyagerEnv(
-            mc_port=mc_port,
-            azure_login=azure_login,
-            server_port=server_port,
-            request_timeout=env_request_timeout,
-        )
-        self.env_wait_ticks = env_wait_ticks
-        self.reset_placed_if_failed = reset_placed_if_failed
-        self.max_iterations = max_iterations
-
-        # init agents
-        self.action_agent = ActionAgent(
-            temperature=action_agent_temperature,
-            request_timeout=openai_api_request_timeout,
-            ckpt_dir=ckpt_dir,
-            resume=resume,
-            chat_log=action_agent_show_chat_log,
-            execution_error=action_agent_show_execution_error,
-        )
-        self.action_agent_task_max_retries = action_agent_task_max_retries
-        self.curriculum_agent = CurriculumAgent(
-            temperature=curriculum_agent_temperature,
-            qa_temperature=curriculum_agent_qa_temperature,
-            request_timeout=openai_api_request_timeout,
-            ckpt_dir=ckpt_dir,
-            resume=resume,
-            mode=curriculum_agent_mode,
-            warm_up=curriculum_agent_warm_up,
-            core_inventory_items=curriculum_agent_core_inventory_items,
-        )
-        self.critic_agent = CriticAgent(
-            temperature=critic_agent_temperature,
-            request_timeout=openai_api_request_timeout,
-            mode=critic_agent_mode,
-        )
-        self.skill_manager = SkillManager(
-            temperature=skill_manager_temperature,
-            retrieval_top_k=skill_manager_retrieval_top_k,
-            request_timeout=openai_api_request_timeout,
-            ckpt_dir=skill_library_dir if skill_library_dir else ckpt_dir,
-            resume=True if resume or skill_library_dir else False,
-        )
-        self.recorder = U.EventRecorder(ckpt_dir=ckpt_dir, resume=resume)
-        self.resume = resume
+        self.env = env
+        self.action_agent = action_agent
+        self.curriculum_agent = curriculum_agent
+        self.critic_agent = critic_agent
+        self.skill_manager = skill_manager
+        self.recorder = recorder
 
         # init variables for rollout
-        self.action_agent_rollout_num_iter = -1
         self.task = None
         self.context = ""
         self.messages = None
@@ -144,14 +33,13 @@ class Voyager:
         self.last_events = None
 
     def reset(self, task, context="", reset_env=True):
-        self.action_agent_rollout_num_iter = 0
+        self.action_agent.num_iter = 0
         self.task = task
         self.context = context
         if reset_env:
             self.env.reset(
                 options={
                     "mode": "soft",
-                    "wait_ticks": self.env_wait_ticks,
                 }
             )
         difficulty = (
@@ -182,7 +70,7 @@ class Voyager:
         self.env.close()
 
     def step(self):
-        if self.action_agent_rollout_num_iter < 0:
+        if self.action_agent.num_iter < 0:
             raise ValueError("Agent must be reset before stepping")
         ai_message = self.action_agent.llm.invoke(self.messages)
         print(f"\033[34m****Action Agent ai message****\n{ai_message.content}\033[0m")
@@ -207,22 +95,6 @@ class Voyager:
                 max_retries=5,
             )
 
-            if self.reset_placed_if_failed and not success:
-                # revert all the placing event in the last step
-                blocks = []
-                positions = []
-                for event_type, event in events:
-                    if event_type == "onSave" and event["onSave"].endswith("_placed"):
-                        block = event["onSave"].split("_placed")[0]
-                        position = event["status"]["position"]
-                        blocks.append(block)
-                        positions.append(position)
-                new_events = self.env.step(
-                    f"await givePlacedItemBack(bot, {U.json_dumps(blocks)}, {U.json_dumps(positions)})",
-                    programs=self.skill_manager.programs,
-                )
-                events[-1][1]["inventory"] = new_events[-1][1]["inventory"]
-                events[-1][1]["voxels"] = new_events[-1][1]["voxels"]
             new_skills = self.skill_manager.retrieve_skills(
                 query=self.context
                 + "\n\n"
@@ -243,11 +115,8 @@ class Voyager:
             self.recorder.record([], self.task)
             print(f"\033[34m{parsed_result} Trying again!\033[0m")
         assert len(self.messages) == 2
-        self.action_agent_rollout_num_iter += 1
-        done = (
-            self.action_agent_rollout_num_iter >= self.action_agent_task_max_retries
-            or success
-        )
+        self.action_agent.num_iter += 1
+        done = self.action_agent.num_iter >= self.action_agent.max_retries or success
         info = {
             "task": self.task,
             "success": success,
@@ -274,18 +143,15 @@ class Voyager:
         return info
 
     def learn(self, reset_env=True):
-        reset_mode = "soft" if self.resume else "hard"
         self.env.reset(
             options={
-                "mode": reset_mode,
-                "wait_ticks": self.env_wait_ticks,
+                "mode": "hard",
             }
         )
-        self.resume = True
         self.last_events = self.env.step("")
 
         while True:
-            if self.recorder.iteration > self.max_iterations:
+            if self.recorder.iteration > self.env.max_iteractions:
                 print("Iteration limit reached")
                 break
             task, context = self.curriculum_agent.propose_next_task(
@@ -294,7 +160,7 @@ class Voyager:
                 max_retries=5,
             )
             print(
-                f"\033[35mStarting task {task} for at most {self.action_agent_task_max_retries} times\033[0m"
+                f"\033[35mStarting task {task} for at most {self.action_agent.max_retries} times\033[0m"
             )
             try:
                 info = self.rollout(
@@ -312,7 +178,6 @@ class Voyager:
                 self.last_events = self.env.reset(
                     options={
                         "mode": "hard",
-                        "wait_ticks": self.env_wait_ticks,
                         "inventory": self.last_events[-1][1]["inventory"],
                         "equipment": self.last_events[-1][1]["status"]["equipment"],
                         "position": self.last_events[-1][1]["status"]["position"],
@@ -344,7 +209,6 @@ class Voyager:
             self.last_events = self.env.reset(
                 options={
                     "mode": "hard",
-                    "wait_ticks": self.env_wait_ticks,
                 }
             )
         return self.curriculum_agent.decompose_task(task, self.last_events)
@@ -357,7 +221,6 @@ class Voyager:
         self.env.reset(
             options={
                 "mode": reset_mode,
-                "wait_ticks": self.env_wait_ticks,
             }
         )
         self.curriculum_agent.completed_tasks = []
@@ -367,7 +230,7 @@ class Voyager:
             next_task = sub_goals[self.curriculum_agent.progress]
             context = self.curriculum_agent.get_task_context(next_task)
             print(
-                f"\033[35mStarting task {next_task} for at most {self.action_agent_task_max_retries} times\033[0m"
+                f"\033[35mStarting task {next_task} for at most {self.action_agent.max_retries} times\033[0m"
             )
             info = self.rollout(
                 task=next_task,

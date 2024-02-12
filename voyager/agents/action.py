@@ -19,11 +19,15 @@ class ActionAgent:
         ckpt_dir="ckpt",
         resume=False,
         chat_log=True,
+        max_retries=4,
         execution_error=True,
+        num_iter=-1,
     ):
         self.ckpt_dir = ckpt_dir
         self.chat_log = chat_log
         self.execution_error = execution_error
+        self.max_retries = max_retries
+        self.num_iter = num_iter
         U.f_mkdir(f"{ckpt_dir}/action")
         if resume:
             print(f"\033[32mLoading Action Agent from {ckpt_dir}/action\033[0m")
