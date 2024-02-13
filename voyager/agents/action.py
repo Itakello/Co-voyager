@@ -4,11 +4,11 @@ import time
 from javascript import require
 from langchain.prompts import SystemMessagePromptTemplate
 from langchain.schema import AIMessage, HumanMessage, SystemMessage
-from langchain_openai import AzureChatOpenAI
 
 import voyager.utils as U
 from voyager.control_primitives_context import load_control_primitives_context
 from voyager.prompts import load_prompt
+from voyager.utils.llms import get_llm
 
 
 class ActionAgent:
@@ -34,12 +34,7 @@ class ActionAgent:
             self.chest_memory = U.load_json(f"{ckpt_dir}/action/chest_memory.json")
         else:
             self.chest_memory = {}
-        self.llm = AzureChatOpenAI(
-            deployment_name="DISI-GLP-Stefan",
-            model_name="",
-            temperature=temperature,
-            timeout=request_timeout,
-        )
+        self.llm = get_llm("gpt-4", temperature, request_timeout)
 
     def update_chest_memory(self, chests):
         for position, chest in chests.items():
@@ -189,19 +184,15 @@ class ActionAgent:
 
         observation += f"Task: {task}\n\n"
 
-        if context:
-            observation += f"Context: {context}\n\n"
-        else:
-            observation += f"Context: None\n\n"
+        context_content = context if context else "None"
+        observation += f"Context: {context_content}\n\n"
 
-        if critique:
-            observation += f"Critique: {critique}\n\n"
-        else:
-            observation += f"Critique: None\n\n"
+        critique_content = critique if critique else "None"
+        observation += f"Critique: {critique_content}\n\n"
 
         return HumanMessage(content=observation)
 
-    def process_ai_message(self, message):
+    def process_ai_message(self, message) -> dict:
         assert isinstance(message, AIMessage)
 
         retry = 3
@@ -212,7 +203,7 @@ class ActionAgent:
                 babel_generator = require("@babel/generator").default
 
                 code_pattern = re.compile(r"```(?:javascript|js)(.*?)```", re.DOTALL)
-                code = "\n".join(code_pattern.findall(message.content))
+                code = "\n".join(code_pattern.findall(str(message.content)))
                 parsed = babel.parse(code)
                 functions = []
                 assert len(list(parsed.program.body)) > 0, "No functions found"
@@ -256,7 +247,8 @@ class ActionAgent:
                 retry -= 1
                 error = e
                 time.sleep(1)
-        return f"Error parsing action response (before program execution): {error}"
+        print(f"Error parsing action response (before program execution): {error}")
+        return {}
 
     def summarize_chatlog(self, events):
         def filter_item(message: str):

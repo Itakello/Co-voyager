@@ -1,7 +1,9 @@
 import pkg_resources
+
 import voyager.utils as U
 
 
-def load_prompt(prompt):
+def load_prompt(prompt) -> str:
     package_path = pkg_resources.resource_filename("voyager", "")
-    return U.load_text(f"{package_path}/prompts/{prompt}.txt")
+    prompt = U.load_text(f"{package_path}/prompts/{prompt}.txt")
+    return str(prompt)

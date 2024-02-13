@@ -1,8 +1,8 @@
 from langchain.schema import HumanMessage, SystemMessage
-from langchain_openai import AzureChatOpenAI
 
 from voyager.prompts import load_prompt
 from voyager.utils.json_utils import fix_and_parse_json
+from voyager.utils.llms import get_llm
 
 
 class CriticAgent:
@@ -12,12 +12,7 @@ class CriticAgent:
         request_timeout=120,
         mode="auto",
     ):
-        self.llm = AzureChatOpenAI(
-            deployment_name="DISI-GLP-Stefan",
-            model_name="",
-            temperature=temperature,
-            request_timeout=request_timeout,
-        )
+        self.llm = get_llm("gpt-4", temperature, request_timeout)
         assert mode in ["auto", "manual"]
         self.mode = mode
 

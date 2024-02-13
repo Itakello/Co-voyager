@@ -2,11 +2,12 @@ import os
 
 from langchain.schema import HumanMessage, SystemMessage
 from langchain_community.vectorstores import Chroma
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 
 import voyager.utils as U
 from voyager.control_primitives import load_control_primitives
 from voyager.prompts import load_prompt
+from voyager.utils.llms import get_llm
 
 
 class SkillManager:
@@ -18,11 +19,7 @@ class SkillManager:
         ckpt_dir="ckpt",
         resume=False,
     ):
-        self.llm = ChatOpenAI(
-            model_name="gpt-3.5-turbo",
-            temperature=temperature,
-            request_timeout=request_timeout,
-        )
+        self.llm = get_llm("gpt-3.5-turbo", temperature, request_timeout)
         U.f_mkdir(f"{ckpt_dir}/skill/code")
         U.f_mkdir(f"{ckpt_dir}/skill/description")
         U.f_mkdir(f"{ckpt_dir}/skill/vectordb")

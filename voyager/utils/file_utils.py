@@ -1,24 +1,23 @@
 """
 File system utils.
 """
-import collections
-import os
-import pickle
-import sys
-import errno
-import shutil
-import glob
 
 # import pwd
 import codecs
-import hashlib
-import tarfile
+import collections
+import errno
 import fnmatch
+import glob
+import hashlib
+import logging
+import os
+import pickle
+import shutil
+import sys
+import tarfile
 import tempfile
 from datetime import datetime
 from socket import gethostname
-import logging
-
 
 f_ext = os.path.splitext
 

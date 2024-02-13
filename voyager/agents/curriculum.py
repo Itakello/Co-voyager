@@ -10,6 +10,7 @@ from langchain_openai import AzureChatOpenAI, ChatOpenAI, OpenAIEmbeddings
 import voyager.utils as U
 from voyager.prompts import load_prompt
 from voyager.utils.json_utils import fix_and_parse_json
+from voyager.utils.llms import get_llm
 
 
 class CurriculumAgent:
@@ -24,17 +25,8 @@ class CurriculumAgent:
         warm_up=None,
         core_inventory_items: str | None = None,
     ):
-        self.llm = AzureChatOpenAI(
-            deployment_name="DISI-GLP-Stefan",
-            model_name="",
-            temperature=temperature,
-            request_timeout=request_timeout,
-        )
-        self.qa_llm = ChatOpenAI(
-            model_name="gpt-3.5-turbo",
-            temperature=qa_temperature,
-            request_timeout=request_timeout,
-        )
+        self.llm = get_llm("gpt-4", temperature, request_timeout)
+        self.qa_llm = get_llm("gpt-3.5-turbo", qa_temperature, request_timeout)
         assert mode in [
             "auto",
             "manual",

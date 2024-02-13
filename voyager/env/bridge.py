@@ -11,15 +11,15 @@ from gymnasium.core import ObsType
 import voyager.utils as U
 
 from .minecraft_launcher import MinecraftInstance
-from .process_monitor import SubprocessMonitor
+from .process_monitor import SubProcess
 
 
 class VoyagerEnv(gym.Env):
     def __init__(
         self,
-        mc_port=None,
-        azure_login=None,
-        wait_ticks=25,
+        mc_port,
+        azure_login,
+        wait_ticks=50,
         server_host="http://127.0.0.1",
         max_iteractions=160,
         server_port=3000,
@@ -33,16 +33,14 @@ class VoyagerEnv(gym.Env):
                 "Both mc_port and mc_login are specified, mc_port will be ignored"
             )
         self.mc_port = mc_port
-        self.azure_login = azure_login
         self.server = f"{server_host}:{server_port}"
-        self.server_port = server_port
         self.max_iteractions = max_iteractions
         self.request_timeout = request_timeout
         self.wait_ticks = wait_ticks
         self.log_path = log_path
         self.mineflayer = self.get_mineflayer_process(server_port)
         if azure_login:
-            self.mc_instance = self.get_mc_instance()
+            self.mc_instance = self.get_mc_instance(azure_login)
         else:
             self.mc_instance = None
         self.has_reset = False
@@ -50,10 +48,11 @@ class VoyagerEnv(gym.Env):
         self.connected = False
         self.server_paused = False
 
-    def get_mineflayer_process(self, server_port):
+    def get_mineflayer_process(self, server_port: int) -> SubProcess:
+        print("Creating Mineflayer process")
         U.f_mkdir(self.log_path, "mineflayer")
         file_path = os.path.abspath(os.path.dirname(__file__))
-        return SubprocessMonitor(
+        return SubProcess(
             commands=[
                 "node",
                 U.f_join(file_path, "mineflayer/index.js"),
@@ -64,55 +63,62 @@ class VoyagerEnv(gym.Env):
             log_path=U.f_join(self.log_path, "mineflayer"),
         )
 
-    def get_mc_instance(self):
+    def get_mc_instance(self, azure_login: dict) -> MinecraftInstance:
         print("Creating Minecraft server")
         U.f_mkdir(self.log_path, "minecraft")
         return MinecraftInstance(
-            **self.azure_login,
+            client_id=azure_login["client_id"],
+            redirect_url=azure_login["redirect_url"],
+            secret_value=azure_login["secret_value"],
+            version=azure_login["version"],
             mineflayer=self.mineflayer,
             log_path=U.f_join(self.log_path, "minecraft"),
         )
 
-    def check_process(self):
+    def _start_minecraft_server(self):
+        print("Starting Minecraft server")
+        self.mc_instance.run()
+        self.mc_port = self.mc_instance.port
+        self.reset_options["port"] = self.mc_instance.port
+        print(f"Server started on port {self.reset_options['port']}")
+
+    def _start_mineflayer(self):
+        print("Starting Mineflayer process")
+        started = False
+        for _ in range(3):
+            self.mineflayer.start()
+            if self.mineflayer.is_running:
+                started = True
+                break
+        if not started:
+            raise RuntimeError("Mineflayer process failed to start")
+        print(self.mineflayer.ready_line)
+        res = requests.post(
+            f"{self.server}/start",
+            json=self.reset_options,
+            timeout=self.request_timeout,
+        )
+        if res.status_code != 200:
+            self.mineflayer.stop()
+            raise RuntimeError(f"Minecraft server reply with code {res.status_code}")
+        return res.json()
+
+    def _start_bot(self) -> str:
         if self.mc_instance and not self.mc_instance.is_running:
-            # if self.mc_instance:
-            #     self.mc_instance.check_process()
-            #     if not self.mc_instance.is_running:
-            print("Starting Minecraft server")
-            self.mc_instance.run()
-            self.mc_port = self.mc_instance.port
-            self.reset_options["port"] = self.mc_instance.port
-            print(f"Server started on port {self.reset_options['port']}")
-        retry = 0
-        while not self.mineflayer.is_running:
-            print("Mineflayer process has exited, restarting")
-            self.mineflayer.run()
-            if not self.mineflayer.is_running:
-                if retry > 3:
-                    raise RuntimeError("Mineflayer process failed to start")
-                else:
-                    continue
-            print(self.mineflayer.ready_line)
-            res = requests.post(
-                f"{self.server}/start",
-                json=self.reset_options,
-                timeout=self.request_timeout,
-            )
-            if res.status_code != 200:
-                self.mineflayer.stop()
-                raise RuntimeError(
-                    f"Minecraft server reply with code {res.status_code}"
-                )
-            return res.json()
+            self._start_minecraft_server()
+        res = ""
+        if not self.mineflayer.is_running:
+            res = self._start_mineflayer()
+        return res
 
     def step(
         self,
         code: str,
         programs: str = "",
-    ) -> Tuple[ObsType, SupportsFloat, bool, bool, Dict[str, Any]]:
+    ) -> dict:
         if not self.has_reset:
             raise RuntimeError("Environment has not been reset yet")
-        self.check_process()
+        self._start_bot()
         self.unpause()
         data = {
             "code": code,
@@ -132,31 +138,30 @@ class VoyagerEnv(gym.Env):
 
     def reset(
         self,
-        *,
-        seed=None,
-        options=None,
-    ) -> Tuple[ObsType, Dict[str, Any]]:
-        if options is None:
-            options = {}
-
-        if options.get("inventory", {}) and options.get("mode", "hard") != "hard":
-            raise RuntimeError("inventory can only be set when options is hard")
+        mode: str = "hard",
+        inventory: dict = {},
+        equipment: list = [],
+        spread: bool = False,
+        position=None,
+    ) -> dict:
+        if inventory and mode != "hard":
+            raise RuntimeError("inventory can only be set when mode is hard")
 
         self.reset_options = {
             "port": self.mc_port,
-            "reset": options.get("mode", "hard"),
-            "inventory": options.get("inventory", {}),
-            "equipment": options.get("equipment", []),
-            "spread": options.get("spread", False),
+            "reset": mode,
+            "inventory": inventory,
+            "equipment": equipment,
+            "spread": spread,
             "waitTicks": self.wait_ticks,
-            "position": options.get("position", None),
+            "position": position,
         }
 
         self.unpause()
         self.mineflayer.stop()
-        time.sleep(1)  # wait for mineflayer to exit
+        time.sleep(3)  # wait for mineflayer to exit
 
-        returned_data = self.check_process()
+        returned_data = self._start_bot()
         self.has_reset = True
         self.connected = True
         # All the reset in step will be soft
@@ -164,29 +169,38 @@ class VoyagerEnv(gym.Env):
         self.pause()
         return json.loads(returned_data)
 
-    def close(self):
+    def close(self) -> None:
         self.unpause()
         if self.connected:
             res = requests.post(f"{self.server}/stop")
             if res.status_code == 200:
                 self.connected = False
+            else:
+                raise RuntimeError(
+                    f"Failed to stop Minecraft server with code {res.status_code}"
+                )
         if self.mc_instance:
             self.mc_instance.stop()
         self.mineflayer.stop()
-        return not self.connected
 
-    def pause(self):
-        if self.mineflayer.is_running and not self.server_paused:
-            res = requests.post(f"{self.server}/pause")
-            if res.status_code == 200:
-                self.server_paused = True
-        return self.server_paused
+    def pause(self) -> None:
+        if self.server_paused:
+            return
+        res = requests.post(f"{self.server}/pause")
+        if res.status_code == 200:
+            self.server_paused = True
+        else:
+            raise RuntimeError(
+                f"Failed to pause Minecraft server with code {res.status_code}"
+            )
 
-    def unpause(self):
-        if self.mineflayer.is_running and self.server_paused:
-            res = requests.post(f"{self.server}/pause")
-            if res.status_code == 200:
-                self.server_paused = False
-            else:
-                print(res.json())
-        return self.server_paused
+    def unpause(self) -> None:
+        if not self.server_paused:
+            return
+        res = requests.post(f"{self.server}/pause")
+        if res.status_code == 200:
+            self.server_paused = False
+        else:
+            raise RuntimeError(
+                f"Failed to unpause Minecraft server with code {res.status_code}"
+            )

@@ -1,11 +1,12 @@
 import os
 import re
+import sys
 
 import minecraft_launcher_lib
-import sys
+
 import voyager.utils as U
 
-from .process_monitor import SubprocessMonitor
+from .process_monitor import SubProcess
 
 
 class MinecraftInstance:
@@ -34,7 +35,7 @@ class MinecraftInstance:
                 print(e)
 
         self.mc_command = self.get_mc_command()
-        self.mc_process = SubprocessMonitor(
+        self.mc_process = SubProcess(
             commands=self.mc_command,
             name="minecraft",
             ready_match=r"Started serving on (\d+)",
@@ -47,7 +48,7 @@ class MinecraftInstance:
     def get_mineflayer_process(self, server_port):
         U.f_mkdir(self.log_path, "../mineflayer")
         file_path = os.path.abspath(os.path.dirname(__file__))
-        return SubprocessMonitor(
+        return SubProcess(
             commands=[
                 "node",
                 U.f_join(file_path, "mineflayer/index.js"),
@@ -110,7 +111,7 @@ class MinecraftInstance:
         return mc_command
 
     def run(self):
-        self.mc_process.run()
+        self.mc_process.start()
         pattern = r"Started serving on (\d+)"
         match = re.search(pattern, self.mc_process.ready_line)
         if match:
