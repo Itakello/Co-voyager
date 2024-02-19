@@ -13,3 +13,4 @@ gymnasium
 psutil
 minecraft_launcher_lib
 langchain-openai
+wandb

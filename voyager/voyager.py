@@ -1,77 +1,63 @@
 import copy
-import time
+from dataclasses import dataclass, field
 
 import voyager.utils as U
+import wandb
+from voyager.classes.subtask import SubTask
+from voyager.classes.task import Task
 
-from .agents import ActionAgent, CriticAgent, CurriculumAgent, SkillManager
+from .agents import ActionAgent, CriticAgent, SkillManager
 from .env import VoyagerEnv
 
 
+@dataclass
 class Voyager:
 
-    def __init__(
-        self,
-        env: VoyagerEnv,
-        action_agent: ActionAgent,
-        curriculum_agent: CurriculumAgent,
-        critic_agent: CriticAgent,
-        skill_manager: SkillManager,
-        recorder: U.EventRecorder,
-    ):
-        self.env = env
-        self.action_agent = action_agent
-        self.curriculum_agent = curriculum_agent
-        self.critic_agent = critic_agent
-        self.skill_manager = skill_manager
-        self.recorder = recorder
-
-        # init variables for rollout
-        self.task = ""
-        self.context = ""
-        self.messages = []
-        self.conversations = []
-        self.last_events = []
+    env: VoyagerEnv
+    action_agent: ActionAgent
+    critic_agent: CriticAgent
+    skill_manager: SkillManager
+    iterations: int = 0
+    last_events: list = field(default_factory=list)
 
     def learn(self, reset_env=True) -> None:
-        self.env.reset(
-            mode="hard",
-        )
+        self.env.reset()
         self.last_events = self.env.step("")
 
         while True:
-            if self.recorder.iteration > self.env.max_iteractions:
+            if self.iterations > self.env.max_iteractions:
                 print("Iteration limit reached")
                 break
             task, context = self.curriculum_agent.propose_next_task(
                 events=self.last_events,
                 chest_observation=self.action_agent.render_chest_observation(),
-                max_retries=5,
             )
             print(
-                f"\033[35mStarting task {task} for at most {self.action_agent.max_retries} times\033[0m"
+                f"\033[35mStarting task {task} for at most {self.action_agent.MAX_RETRIES} times\033[0m"
             )
-            try:
-                info = self._rollout(
-                    task=task,
-                    context=context,
-                    reset_env=reset_env,
-                )
-            except Exception as e:
-                time.sleep(3)  # wait for mineflayer to exit
+            performed = False
+            for _ in range(3):
+                try:
+                    info = self._rollout(
+                        sub_task=task,
+                        context=context,
+                        reset_env=reset_env,
+                    )
+                    performed = True
+                    break
+                except Exception as e:
+                    self.last_events = self.env.reset(
+                        inventory=self.last_events[-1][1]["inventory"],
+                        equipment=self.last_events[-1][1]["status"]["equipment"],
+                        position=self.last_events[-1][1]["status"]["position"],
+                    )
+                    print("Your last round rollout terminated due to error:")
+                    print(f"\033[41m{e}\033[0m")
+            if not performed:
                 info = {
                     "task": task,
                     "success": False,
                 }
-                # reset bot status here
-                self.last_events = self.env.reset(
-                    mode="hard",
-                    inventory=self.last_events[-1][1]["inventory"],
-                    equipment=self.last_events[-1][1]["status"]["equipment"],
-                    position=self.last_events[-1][1]["status"]["position"],
-                )
-                # use red color background to print the error
-                print("Your last round rollout terminated due to error:")
-                print(f"\033[41m{e}\033[0m")
 
             if info["success"]:
                 self.skill_manager.add_new_skill(info)
@@ -87,138 +73,95 @@ class Voyager:
 
     def decompose_task(self, task):
         if self.last_events == []:
-            self.last_events = self.env.reset(
-                mode="hard",
-            )
-        return self.curriculum_agent.decompose_task(task, self.last_events)
+            self.last_events = self.env.reset()
+        return self.curriculum_agent._REFERENCE_decompose_task(task, self.last_events)
 
-    def inference(self, task=None, sub_goals=[], reset_mode="hard", reset_env=True):
-        if not task and not sub_goals:
-            raise ValueError("Either task or sub_goals must be provided")
-        if not sub_goals:
-            sub_goals = self.decompose_task(task)
+    def execute_task(
+        self,
+        task: Task,
+        starting_position: tuple[int, int, int] = (-14, -60, -4),
+        reset_mode: str = "hard",
+    ) -> None:
         self.env.reset(
             mode=reset_mode,
         )
-        self.curriculum_agent.completed_tasks = []
-        self.curriculum_agent.failed_tasks = []
-        self.last_events = self.env.step("")
-        while self.curriculum_agent.progress < len(sub_goals):
-            next_task = sub_goals[self.curriculum_agent.progress]
-            context = self.curriculum_agent.get_task_context(next_task)
-            print(
-                f"\033[35mStarting task {next_task} for at most {self.action_agent.max_retries} times\033[0m"
-            )
-            info = self._rollout(
-                task=next_task,
-                context=context,
-                reset_env=reset_env,
-            )
-            self.curriculum_agent.update_exploration_progress(info)
-            print(
-                f"\033[35mCompleted tasks: {', '.join(self.curriculum_agent.completed_tasks)}\033[0m"
-            )
-            print(
-                f"\033[35mFailed tasks: {', '.join(self.curriculum_agent.failed_tasks)}\033[0m"
-            )
 
-    def _reset(self, task, context="", reset_env=True):
-        self.action_agent.num_iter = 0
-        self.task = task
-        self.context = context
-        if reset_env:
-            self.env.reset(
-                mode="soft",
-            )
-        difficulty = (
-            "easy" if len(self.curriculum_agent.completed_tasks) > 15 else "peaceful"
+    def learn_task(
+        self,
+        task: Task,
+        starting_position: tuple[int, int, int] = (-14, -60, -4),
+        reset_mode: str = "hard",
+    ):
+        self.env.reset(
+            mode=reset_mode,
         )
-        # step to peek an observation
+
+        for sub_task in task.sub_tasks:
+            print(
+                f"\033[35mLearning task [{sub_task.content}] for at most {self.action_agent.MAX_RETRIES} times\033[0m"
+            )
+            performed = False
+            for _ in range(3):
+                self.last_events = self.env.step(
+                    f"bot.chat(`/tp {starting_position[0]} {starting_position[1]} {starting_position[2]}`);\n"
+                    + "bot.chat(`/time set day`);",
+                )
+                try:
+                    retries = self._rollout(
+                        sub_task=sub_task,
+                    )
+                    performed = True
+                    break
+                except Exception as e:
+                    print("Your last round rollout terminated due to error:")
+                    print(f"\033[41m{e}\033[0m")
+            if not performed:
+                raise ValueError("Rollout failed")
+            wandb.log({"retries": retries})
+
+    def _step(
+        self, events: list, sub_task: SubTask, code: str, critique: str
+    ) -> tuple[bool, dict]:
+        skill_text = self.action_agent.create_skill(
+            events=events, subtask=sub_task, code=code, critique=critique
+        )
+        print(f"\033[34m****Action Agent ai message****\n{skill_text}\033[0m")
+        program_code, program_name, exec_code = self.action_agent.extract_code(
+            skill_text=skill_text
+        )
+        full_code = program_code + "\n" + exec_code
         events = self.env.step(
-            "bot.chat(`/time set ${getNextTime()}`);\n"
-            + f"bot.chat('/difficulty {difficulty}');"
+            code=full_code,
+            programs=self.skill_manager.programs,
         )
-        skills = self.skill_manager.retrieve_skills(query=self.context)
-        print(
-            f"\033[33mRender Action Agent system message with {len(skills)} skills\033[0m"
-        )
-        system_message = self.action_agent.render_system_message(skills=skills)
-        human_message = self.action_agent.render_human_message(
-            events=events, code="", task=self.task, context=context, critique=""
-        )
-        self.messages = [system_message, human_message]
-        print(
-            f"\033[32m****Action Agent human message****\n{human_message.content}\033[0m"
-        )
-        self.conversations = []
-        return self.messages
 
-    def _step(self):
-        if self.action_agent.num_iter < 0:
-            raise ValueError("Agent must be reset before stepping")
-        ai_message = self.action_agent.llm.invoke(self.messages)
-        print(f"\033[34m****Action Agent ai message****\n{ai_message.content}\033[0m")
-        self.conversations.append(
-            (self.messages[0].content, self.messages[1].content, ai_message.content)
+        self.action_agent.update_chest_memory(events[-1][1]["nearbyChests"])
+        success, critique = self.critic_agent.check_task_success(
+            events=events,
+            task=sub_task.content,
+            chest_observation=self.action_agent.render_chest_observation(),
+            max_retries=5,
         )
-        parsed_result = self.action_agent.process_ai_message(message=ai_message)
-        success = False
-        if isinstance(parsed_result, dict):
-            code = parsed_result["program_code"] + "\n" + parsed_result["exec_code"]
-            events = self.env.step(
-                code,
-                programs=self.skill_manager.programs,
-            )
-            self.recorder.record(events, self.task)
-            self.action_agent.update_chest_memory(events[-1][1]["nearbyChests"])
-            success, critique = self.critic_agent.check_task_success(
-                events=events,
-                task=self.task,
-                context=self.context,
-                chest_observation=self.action_agent.render_chest_observation(),
-                max_retries=5,
-            )
 
-            new_skills = self.skill_manager.retrieve_skills(
-                query=self.context
-                + "\n\n"
-                + self.action_agent.summarize_chatlog(events)
-            )
-            system_message = self.action_agent.render_system_message(skills=new_skills)
-            human_message = self.action_agent.render_human_message(
-                events=events,
-                code=parsed_result["program_code"],
-                task=self.task,
-                context=self.context,
-                critique=critique,
-            )
-            self.last_events = copy.deepcopy(events)
-            self.messages = [system_message, human_message]
-        else:
-            assert isinstance(parsed_result, str)
-            self.recorder.record([], self.task)
-            print(f"\033[34m{parsed_result} Trying again!\033[0m")
-        assert len(self.messages) == 2
-        self.action_agent.num_iter += 1
-        done = self.action_agent.num_iter >= self.action_agent.max_retries or success
-        info = {
-            "task": self.task,
-            "success": success,
-            "conversations": self.conversations,
-        }
         if success:
-            info["program_code"] = parsed_result.get("program_code")
-            info["program_name"] = parsed_result.get("program_name")
-        else:
-            print(
-                f"\033[32m****Action Agent human message****\n{self.messages[-1].content}\033[0m"
+            self.skill_manager.add_new_skill(
+                program_name=program_name,
+                program_code=program_code,
             )
-        return done, info
 
-    def _rollout(self, *, task, context, reset_env=True):
-        self._reset(task=task, context=context, reset_env=reset_env)
-        while True:
-            done, info = self._step()
-            if done:
-                break
-        return info
+        self.last_events = copy.deepcopy(events)
+
+        return success, critique
+
+    def _rollout(self, sub_task: SubTask) -> tuple[dict, int]:
+        events = self.env.step("")
+        iter = 0
+        success = False
+        code = ""
+        critique = ""
+        while not success or iter >= self.action_agent.MAX_RETRIES:
+            success, code, critique = self._step(
+                events=events, sub_task=sub_task, code=code, critique=critique
+            )
+            iter += 1
+        return iter

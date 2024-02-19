@@ -32,7 +32,6 @@ class VoyagerEnv(gym.Env):
             warnings.warn(
                 "Both mc_port and mc_login are specified, mc_port will be ignored"
             )
-        self.mc_port = mc_port
         self.server = f"{server_host}:{server_port}"
         self.max_iteractions = max_iteractions
         self.request_timeout = request_timeout
@@ -41,8 +40,10 @@ class VoyagerEnv(gym.Env):
         self.mineflayer = self.get_mineflayer_process(server_port)
         if azure_login:
             self.mc_instance = self.get_mc_instance(azure_login)
+            self.mc_port = self._start_minecraft_server()
         else:
             self.mc_instance = None
+            self.mc_port = mc_port
         self.has_reset = False
         self.reset_options = None
         self.connected = False
@@ -75,14 +76,17 @@ class VoyagerEnv(gym.Env):
             log_path=U.f_join(self.log_path, "minecraft"),
         )
 
-    def _start_minecraft_server(self):
+    def _start_minecraft_server(self) -> int:
+        if not self.mc_instance or self.mc_instance.is_running:
+            raise RuntimeError("Minecraft server is already running")
         print("Starting Minecraft server")
         self.mc_instance.run()
-        self.mc_port = self.mc_instance.port
-        self.reset_options["port"] = self.mc_instance.port
-        print(f"Server started on port {self.reset_options['port']}")
+        print(f"Server started on port {self.mc_instance.port}")
+        return self.mc_instance.port
 
-    def _start_mineflayer(self):
+    def _start_mineflayer(self, options: dict) -> list:
+        if not self.mineflayer or self.mineflayer.is_running:
+            raise RuntimeError("Mineflayer process is already running")
         print("Starting Mineflayer process")
         started = False
         for _ in range(3):
@@ -95,21 +99,44 @@ class VoyagerEnv(gym.Env):
         print(self.mineflayer.ready_line)
         res = requests.post(
             f"{self.server}/start",
-            json=self.reset_options,
+            json=options,
             timeout=self.request_timeout,
         )
         if res.status_code != 200:
             self.mineflayer.stop()
             raise RuntimeError(f"Minecraft server reply with code {res.status_code}")
-        return res.json()
+        last_events = json.loads(res.json())
+        return last_events
 
-    def _start_bot(self) -> str:
-        if self.mc_instance and not self.mc_instance.is_running:
-            self._start_minecraft_server()
-        res = ""
-        if not self.mineflayer.is_running:
-            res = self._start_mineflayer()
-        return res
+    def reset(
+        self,
+        mode: str = "hard",
+        inventory: dict = {},
+        equipment: list = [],
+        spread: bool = False,
+        position=None,
+    ) -> list:
+        if inventory and mode != "hard":
+            raise RuntimeError("inventory can only be set when mode is hard")
+
+        self.unpause()
+        self.mineflayer.stop()
+        time.sleep(3)  # wait for mineflayer to exit
+
+        options = {
+            "port": self.mc_port,
+            "reset": mode,
+            "inventory": inventory,
+            "equipment": equipment,
+            "spread": spread,
+            "waitTicks": self.wait_ticks,
+            "position": position,
+        }
+        last_events = self._start_mineflayer(options)
+        self.has_reset = True
+        self.connected = True
+        self.pause()
+        return last_events
 
     def step(
         self,
@@ -118,7 +145,6 @@ class VoyagerEnv(gym.Env):
     ) -> dict:
         if not self.has_reset:
             raise RuntimeError("Environment has not been reset yet")
-        self._start_bot()
         self.unpause()
         data = {
             "code": code,
@@ -129,45 +155,9 @@ class VoyagerEnv(gym.Env):
         )
         if res.status_code != 200:
             raise RuntimeError("Failed to step Minecraft server")
-        returned_data = res.json()
         self.pause()
-        return json.loads(returned_data)
-
-    def render(self):
-        raise NotImplementedError("render is not implemented")
-
-    def reset(
-        self,
-        mode: str = "hard",
-        inventory: dict = {},
-        equipment: list = [],
-        spread: bool = False,
-        position=None,
-    ) -> dict:
-        if inventory and mode != "hard":
-            raise RuntimeError("inventory can only be set when mode is hard")
-
-        self.reset_options = {
-            "port": self.mc_port,
-            "reset": mode,
-            "inventory": inventory,
-            "equipment": equipment,
-            "spread": spread,
-            "waitTicks": self.wait_ticks,
-            "position": position,
-        }
-
-        self.unpause()
-        self.mineflayer.stop()
-        time.sleep(3)  # wait for mineflayer to exit
-
-        returned_data = self._start_bot()
-        self.has_reset = True
-        self.connected = True
-        # All the reset in step will be soft
-        self.reset_options["reset"] = "soft"
-        self.pause()
-        return json.loads(returned_data)
+        returned_data = json.loads(res.json())
+        return returned_data
 
     def close(self) -> None:
         self.unpause()

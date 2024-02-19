@@ -1,4 +1,5 @@
 import os
+from dataclasses import dataclass
 
 from langchain.schema import HumanMessage, SystemMessage
 from langchain_community.vectorstores import Chroma
@@ -10,32 +11,30 @@ from voyager.prompts import load_prompt
 from voyager.utils.llms import get_llm
 
 
+@dataclass
 class SkillManager:
-    def __init__(
-        self,
-        temperature=0,
-        retrieval_top_k=5,
-        request_timeout=120,
-        ckpt_dir="ckpt",
-        resume=False,
-    ):
-        self.llm = get_llm("gpt-3.5-turbo", temperature, request_timeout)
-        U.f_mkdir(f"{ckpt_dir}/skill/code")
-        U.f_mkdir(f"{ckpt_dir}/skill/description")
-        U.f_mkdir(f"{ckpt_dir}/skill/vectordb")
-        # programs for env execution
-        self.control_primitives = load_control_primitives()
-        if resume:
-            print(f"\033[33mLoading Skill Manager from {ckpt_dir}/skill\033[0m")
-            self.skills = U.load_json(f"{ckpt_dir}/skill/skills.json")
+
+    dir: str
+    temperature: int = 0
+    request_timeout: int = 120
+    llm_type: str = "gpt-3.5-turbo"
+
+    def __post_init__(self):
+        self.llm = get_llm(self.llm_type, self.temperature, self.request_timeout)
+        U.f_mkdir(f"{self.dir}/code")
+        U.f_mkdir(f"{self.dir}/description")
+        U.f_mkdir(f"{self.dir}/vectordb")
+        if U.f_exists(f"{self.dir}/skills.json"):
+            self.skills = U.load_json(f"{self.dir}/skills.json")
         else:
             self.skills = {}
-        self.retrieval_top_k = retrieval_top_k
-        self.ckpt_dir = ckpt_dir
+
+        self.control_primitives = load_control_primitives()
+
         self.vectordb = Chroma(
             collection_name="skill_vectordb",
             embedding_function=OpenAIEmbeddings(),
-            persist_directory=f"{ckpt_dir}/skill/vectordb",
+            persist_directory=f"{self.dir}/vectordb",
         )
         assert self.vectordb._collection.count() == len(self.skills), (
             f"Skill Manager's vectordb is not synced with skills.json.\n"
@@ -43,6 +42,10 @@ class SkillManager:
             f"Did you set resume=False when initializing the manager?\n"
             f"You may need to manually delete the vectordb directory for running from scratch."
         )
+
+    @property
+    def occupied(self) -> bool:
+        return U.f_not_empty(f"{self.dir}/code")
 
     @property
     def programs(self):
@@ -53,12 +56,7 @@ class SkillManager:
             programs += f"{primitives}\n\n"
         return programs
 
-    def add_new_skill(self, info):
-        if info["task"].startswith("Deposit useless items into the chest at"):
-            # No need to reuse the deposit skill
-            return
-        program_name = info["program_name"]
-        program_code = info["program_code"]
+    def add_new_skill(self, program_name: str, program_code: str) -> None:
         skill_description = self._generate_skill_description(program_name, program_code)
         print(
             f"\033[33mSkill Manager generated description for {program_name}:\n{skill_description}\033[0m"
@@ -84,14 +82,12 @@ class SkillManager:
         assert self.vectordb._collection.count() == len(
             self.skills
         ), "vectordb is not synced with skills.json"
-        U.dump_text(
-            program_code, f"{self.ckpt_dir}/skill/code/{dumped_program_name}.js"
-        )
+        U.dump_text(program_code, f"{self.dir}/code/{dumped_program_name}.js")
         U.dump_text(
             skill_description,
-            f"{self.ckpt_dir}/skill/description/{dumped_program_name}.txt",
+            f"{self.dir}/description/{dumped_program_name}.txt",
         )
-        U.dump_json(self.skills, f"{self.ckpt_dir}/skill/skills.json")
+        U.dump_json(self.skills, f"{self.dir}/skills.json")
         self.vectordb.persist()
 
     def retrieve_skills(self, query):

@@ -4,53 +4,43 @@ from voyager.env import VoyagerEnv
 
 
 def get_agents(
-    resume: bool = False,
-    request_timeout: int = 240,
-    skill_library_dir: str = "",
-    ckpt_dir: str = "ckpt",
+    skills_folder: str,
+    temperature: int,
+    request_timeout: int,
+    action_agent_llm_type: str,
+    critic_agent_llm_type: str,
+    skill_manager_llm_type: str,
 ) -> tuple[ActionAgent, CurriculumAgent, CriticAgent, SkillManager]:
     action_agent = ActionAgent(
-        temperature=0,
+        temperature=temperature,
         request_timeout=request_timeout,
-        ckpt_dir=ckpt_dir,
-        resume=resume,
-        chat_log=True,
-        execution_error=True,
-    )
-
-    curriculum_agent = CurriculumAgent(
-        temperature=0,
-        qa_temperature=0,
-        request_timeout=request_timeout,
-        ckpt_dir=ckpt_dir,
-        resume=resume,
-        mode="manual",
-        warm_up=None,
-        core_inventory_items=r".*_log|.*_planks|stick|crafting_table|furnace|cobblestone|dirt|coal|.*_pickaxe|.*_sword|.*_axe",
+        llm_type=action_agent_llm_type,
     )
 
     critic_agent = CriticAgent(
-        temperature=0,
+        temperature=temperature,
         request_timeout=request_timeout,
         mode="manual",
+        llm_type=critic_agent_llm_type,
     )
 
     skill_manager = SkillManager(
-        temperature=0,
-        retrieval_top_k=5,
+        dir=skills_folder,
+        temperature=temperature,
         request_timeout=request_timeout,
-        ckpt_dir=skill_library_dir if skill_library_dir != "" else ckpt_dir,
-        resume=True if resume or skill_library_dir else False,
+        llm_type=skill_manager_llm_type,
     )
-    return action_agent, curriculum_agent, critic_agent, skill_manager
+    return action_agent, critic_agent, skill_manager
 
 
-def get_environment(azure_login: dict) -> VoyagerEnv:
+def get_environment(
+    azure_login: dict, server_port: int, request_timeout: int
+) -> VoyagerEnv:
     env = VoyagerEnv(
         mc_port=None,
         azure_login=azure_login,
-        server_port=3000,
-        request_timeout=600,
+        server_port=server_port,
+        request_timeout=request_timeout,
     )
     return env
 

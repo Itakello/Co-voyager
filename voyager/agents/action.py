@@ -1,42 +1,30 @@
 import re
 import time
+from dataclasses import dataclass, field
 
 from javascript import require
 from langchain.prompts import SystemMessagePromptTemplate
 from langchain.schema import AIMessage, HumanMessage, SystemMessage
 
-import voyager.utils as U
+from voyager.classes.subtask import SubTask
 from voyager.control_primitives_context import load_control_primitives_context
 from voyager.prompts import load_prompt
 from voyager.utils.llms import get_llm
 
 
+@dataclass
 class ActionAgent:
-    def __init__(
-        self,
-        temperature=0,
-        request_timeout=120,
-        ckpt_dir="ckpt",
-        resume=False,
-        chat_log=True,
-        max_retries=4,
-        execution_error=True,
-        num_iter=-1,
-    ):
-        self.ckpt_dir = ckpt_dir
-        self.chat_log = chat_log
-        self.execution_error = execution_error
-        self.max_retries = max_retries
-        self.num_iter = num_iter
-        U.f_mkdir(f"{ckpt_dir}/action")
-        if resume:
-            print(f"\033[32mLoading Action Agent from {ckpt_dir}/action\033[0m")
-            self.chest_memory = U.load_json(f"{ckpt_dir}/action/chest_memory.json")
-        else:
-            self.chest_memory = {}
-        self.llm = get_llm("gpt-4", temperature, request_timeout)
+    temperature: int = 0
+    request_timeout: int = 120
+    MAX_RETRIES: int = 4
+    execution_error: bool = True
+    chest_memory: dict = field(default_factory=dict)
+    llm_type: str = "gpt-4"
 
-    def update_chest_memory(self, chests):
+    def __post_init__(self):
+        self.llm = get_llm(self.llm_type, self.temperature, self.request_timeout)
+
+    def update_chest_memory(self, chests) -> None:
         for position, chest in chests.items():
             if position in self.chest_memory:
                 if isinstance(chest, dict):
@@ -52,9 +40,8 @@ class ActionAgent:
                         f"\033[32mAction Agent saving chest {position}: {chest}\033[0m"
                     )
                     self.chest_memory[position] = chest
-        U.dump_json(self.chest_memory, f"{self.ckpt_dir}/action/chest_memory.json")
 
-    def render_chest_observation(self):
+    def render_chest_observation(self) -> str:
         chests = []
         for chest_position, chest in self.chest_memory.items():
             if isinstance(chest, dict) and len(chest) > 0:
@@ -67,26 +54,21 @@ class ActionAgent:
                 assert chest == "Unknown"
                 chests.append(f"{chest_position}: Unknown items inside")
         assert len(chests) == len(self.chest_memory)
-        if chests:
-            chests = "\n".join(chests)
-            return f"Chests:\n{chests}\n\n"
-        else:
-            return f"Chests: None\n\n"
+        chests_content = "\n" + "\n".join(chests) if chests else "None"
+        return f"Chests:{chests_content}\n\n"
 
-    def render_system_message(self, skills=[]):
-        system_template = load_prompt("action_template")
-        # FIXME: Hardcoded control_primitives
+    def _get_skills_message(self) -> SystemMessage:
+        system_template = load_prompt("new_action_template")
         base_skills = [
             "exploreUntil",
             "mineBlock",
             "craftItem",
             "placeItem",
             "smeltItem",
-            "killMob",
             "useChest",
             "mineflayer",
         ]
-        programs = "\n\n".join(load_control_primitives_context(base_skills) + skills)
+        programs = "\n\n".join(load_control_primitives_context(base_skills))
         response_format = load_prompt("action_response_format")
         system_message_prompt = SystemMessagePromptTemplate.from_template(
             system_template
@@ -94,12 +76,11 @@ class ActionAgent:
         system_message = system_message_prompt.format(
             programs=programs, response_format=response_format
         )
-        assert isinstance(system_message, SystemMessage)
         return system_message
 
-    def render_human_message(
-        self, *, events, code="", task="", context="", critique=""
-    ):
+    def get_status_message(
+        self, events, subtask: SubTask, code="", critique: str = ""
+    ) -> HumanMessage:
         chat_messages = []
         error_messages = []
         # FIXME: damage_messages is not used
@@ -114,11 +95,8 @@ class ActionAgent:
                 damage_messages.append(event["onDamage"])
             elif event_type == "observe":
                 biome = event["status"]["biome"]
-                time_of_day = event["status"]["timeOfDay"]
                 voxels = event["voxels"]
                 entities = event["status"]["entities"]
-                health = event["status"]["health"]
-                hunger = event["status"]["food"]
                 position = event["status"]["position"]
                 equipment = event["status"]["equipment"]
                 inventory_used = event["status"]["inventoryUsed"]
@@ -127,45 +105,30 @@ class ActionAgent:
 
         observation = ""
 
-        if code:
-            observation += f"Code from the last round:\n{code}\n\n"
-        else:
-            observation += f"Code from the last round: No code in the first round\n\n"
+        code_content = f"\n{code}" if code else "No code in the first round"
+        observation += f"Code from the last round:{code_content}\n\n"
 
         if self.execution_error:
-            if error_messages:
-                error = "\n".join(error_messages)
-                observation += f"Execution error:\n{error}\n\n"
-            else:
-                observation += f"Execution error: No error\n\n"
+            error_content = (
+                "\n" + "\n".join(error_messages) if error_messages else "No error"
+            )
+            observation += f"Execution error:{error_content}\n\n"
 
-        if self.chat_log:
-            if chat_messages:
-                chat_log = "\n".join(chat_messages)
-                observation += f"Chat log: {chat_log}\n\n"
-            else:
-                observation += f"Chat log: None\n\n"
+        chat_log_content = "\n" + "\n".join(chat_messages) if chat_messages else "None"
+        observation += f"Chat log: {chat_log_content}\n\n"
 
         observation += f"Biome: {biome}\n\n"
 
-        observation += f"Time: {time_of_day}\n\n"
-
-        if voxels:
-            observation += f"Nearby blocks: {', '.join(voxels)}\n\n"
-        else:
-            observation += f"Nearby blocks: None\n\n"
+        voxels_content = ", ".join(voxels) if voxels else "None"
+        observation += f"Nearby blocks: {voxels_content}\n\n"
 
         if entities:
             nearby_entities = [
-                k for k, v in sorted(entities.items(), key=lambda x: x[1])
+                k for k, _ in sorted(entities.items(), key=lambda x: x[1])
             ]
             observation += f"Nearby entities (nearest to farthest): {', '.join(nearby_entities)}\n\n"
         else:
             observation += f"Nearby entities (nearest to farthest): None\n\n"
-
-        observation += f"Health: {health:.1f}/20\n\n"
-
-        observation += f"Hunger: {hunger:.1f}/20\n\n"
 
         observation += f"Position: x={position['x']:.1f}, y={position['y']:.1f}, z={position['z']:.1f}\n\n"
 
@@ -176,25 +139,34 @@ class ActionAgent:
         else:
             observation += f"Inventory ({inventory_used}/36): Empty\n\n"
 
-        if not (
-            task == "Place and deposit useless items into a chest"
-            or task.startswith("Deposit useless items into the chest at")
-        ):
-            observation += self.render_chest_observation()
+        observation += self.render_chest_observation()
 
-        observation += f"Task: {task}\n\n"
+        observation += f"Task: {subtask.content}\n\n"
 
-        context_content = context if context else "None"
-        observation += f"Context: {context_content}\n\n"
+        observation += f"Materials required: {subtask.materials}\n\n"
+
+        observation += f"Tools required: {subtask.tool}\n\n"
 
         critique_content = critique if critique else "None"
         observation += f"Critique: {critique_content}\n\n"
 
         return HumanMessage(content=observation)
 
-    def process_ai_message(self, message) -> dict:
-        assert isinstance(message, AIMessage)
+    def create_skill(
+        self, events: list, subtask: SubTask, code: str, critique: str
+    ) -> str:
+        system_message = self._get_skills_message()
+        human_message = self.get_status_message(
+            events=events, code="", subtask=subtask, critique=critique
+        )
+        messages = [system_message, human_message]
+        print(
+            f"\033[32m****Action Agent human message****\n{human_message.content}\033[0m"
+        )
+        ai_message = self.llm.invoke(messages)
+        return ai_message.content
 
+    def extract_code(self, skill_text: str) -> tuple[str, str, str]:
         retry = 3
         error = None
         while retry > 0:
@@ -203,7 +175,7 @@ class ActionAgent:
                 babel_generator = require("@babel/generator").default
 
                 code_pattern = re.compile(r"```(?:javascript|js)(.*?)```", re.DOTALL)
-                code = "\n".join(code_pattern.findall(str(message.content)))
+                code = "\n".join(code_pattern.findall(str(skill_text)))
                 parsed = babel.parse(code)
                 functions = []
                 assert len(list(parsed.program.body)) > 0, "No functions found"
@@ -238,38 +210,10 @@ class ActionAgent:
                 ), f"Main function {main_function['name']} must take a single argument named 'bot'"
                 program_code = "\n\n".join(function["body"] for function in functions)
                 exec_code = f"await {main_function['name']}(bot);"
-                return {
-                    "program_code": program_code,
-                    "program_name": main_function["name"],
-                    "exec_code": exec_code,
-                }
+                return program_code, main_function["name"], exec_code
             except Exception as e:
                 retry -= 1
                 error = e
                 time.sleep(1)
         print(f"Error parsing action response (before program execution): {error}")
-        return {}
-
-    def summarize_chatlog(self, events):
-        def filter_item(message: str):
-            craft_pattern = r"I cannot make \w+ because I need: (.*)"
-            craft_pattern2 = (
-                r"I cannot make \w+ because there is no crafting table nearby"
-            )
-            mine_pattern = r"I need at least a (.*) to mine \w+!"
-            if re.match(craft_pattern, message):
-                return re.match(craft_pattern, message).groups()[0]
-            elif re.match(craft_pattern2, message):
-                return "a nearby crafting table"
-            elif re.match(mine_pattern, message):
-                return re.match(mine_pattern, message).groups()[0]
-            else:
-                return ""
-
-        chatlog = set()
-        for event_type, event in events:
-            if event_type == "onChat":
-                item = filter_item(event["onChat"])
-                if item:
-                    chatlog.add(item)
-        return "I also need " + ", ".join(chatlog) + "." if chatlog else ""
+        return "", "", ""

@@ -129,3 +129,4 @@ plot_iter.py
 *.svg
 
 config.ini
+wandb/

@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from langchain.schema import HumanMessage, SystemMessage
 
 from voyager.prompts import load_prompt
@@ -5,56 +7,46 @@ from voyager.utils.json_utils import fix_and_parse_json
 from voyager.utils.llms import get_llm
 
 
+@dataclass
 class CriticAgent:
-    def __init__(
-        self,
-        temperature=0,
-        request_timeout=120,
-        mode="auto",
-    ):
-        self.llm = get_llm("gpt-4", temperature, request_timeout)
-        assert mode in ["auto", "manual"]
-        self.mode = mode
+    temperature: int = 0
+    request_timeout: int = 120
+    mode: str = "auto"
+    llm_type: str = "gpt-4"
+
+    def __post_init__(self):
+        self.llm = get_llm(self.llm_type, self.temperature, self.request_timeout)
+        assert self.mode in ["auto", "manual"]
 
     def check_task_success(
-        self, *, events, task, context, chest_observation, max_retries=5
-    ):
-        human_message = self._render_human_message(
+        self, events, task, chest_observation, max_retries=5
+    ) -> tuple[bool, str]:
+        success = False
+        critique = ""
+        human_message = self._get_status_message(
             events=events,
             task=task,
-            context=context,
             chest_observation=chest_observation,
         )
-
-        messages = [
-            self._render_system_message(),
-            human_message,
-        ]
-
         if self.mode == "manual":
-            return self._human_check_task_success()
+            success, critique = self._human_check_task_success()
         elif self.mode == "auto":
-            return self._ai_check_task_success(
+
+            messages = [
+                SystemMessage(content=load_prompt("critic")),
+                human_message,
+            ]
+            success, critique = self._ai_check_task_success(
                 messages=messages, max_retries=max_retries
             )
         else:
             raise ValueError(f"Invalid critic agent mode: {self.mode}")
+        return success, critique
 
-    def _render_system_message(self):
-        system_message = SystemMessage(content=load_prompt("critic"))
-        return system_message
-
-    def _render_human_message(self, *, events, task, context, chest_observation):
+    def _get_status_message(self, *, events, task, chest_observation):
         assert events[-1][0] == "observe", "Last event must be observe"
-        biome = events[-1][1]["status"]["biome"]
-        time_of_day = events[-1][1]["status"]["timeOfDay"]
-        voxels = events[-1][1]["voxels"]
-        health = events[-1][1]["status"]["health"]
-        hunger = events[-1][1]["status"]["food"]
-        position = events[-1][1]["status"]["position"]
-        equipment = events[-1][1]["status"]["equipment"]
-        inventory_used = events[-1][1]["status"]["inventoryUsed"]
-        inventory = events[-1][1]["inventory"]
+        last_event = events[-1][1]
+        status = last_event["status"]
 
         for i, (event_type, event) in enumerate(events):
             if event_type == "onError":
@@ -63,35 +55,30 @@ class CriticAgent:
 
         observation = ""
 
-        observation += f"Biome: {biome}\n\n"
+        observation += f"Biome: {status['biome']}\n\n"
 
-        observation += f"Time: {time_of_day}\n\n"
+        observation += f"Time: {status['timeOfDay']}\n\n"
 
-        if voxels:
-            observation += f"Nearby blocks: {', '.join(voxels)}\n\n"
-        else:
-            observation += f"Nearby blocks: None\n\n"
+        nearby_blocks_content = (
+            {", ".join(last_event["voxels"])} if last_event["voxels"] else "None"
+        )
+        observation += f"Nearby blocks: {nearby_blocks_content}\n\n"
 
-        observation += f"Health: {health:.1f}/20\n\n"
-        observation += f"Hunger: {hunger:.1f}/20\n\n"
+        observation += f"Health: {status['health']:.1f}/20\n\n"
+        observation += f"Hunger: {status['food']:.1f}/20\n\n"
+        observation += f"Position: x={status['position']['x']:.1f}, y={status['position']['y']:.1f}, z={status['position']['z']:.1f}\n\n"
+        observation += f"Equipment: {status['equipment']}\n\n"
 
-        observation += f"Position: x={position['x']:.1f}, y={position['y']:.1f}, z={position['z']:.1f}\n\n"
-
-        observation += f"Equipment: {equipment}\n\n"
-
-        if inventory:
-            observation += f"Inventory ({inventory_used}/36): {inventory}\n\n"
-        else:
-            observation += f"Inventory ({inventory_used}/36): Empty\n\n"
+        inventory_content = (
+            last_event["inventory"] if last_event["inventory"] else "Empty"
+        )
+        observation += (
+            f"Inventory ({status['inventoryUsed']}/36): {inventory_content}\n\n"
+        )
 
         observation += chest_observation
 
         observation += f"Task: {task}\n\n"
-
-        if context:
-            observation += f"Context: {context}\n\n"
-        else:
-            observation += f"Context: None\n\n"
 
         print(f"\033[31m****Critic Agent human message****\n{observation}\033[0m")
         return HumanMessage(content=observation)
@@ -101,11 +88,10 @@ class CriticAgent:
         success = False
         critique = ""
         while not confirmed:
-            success = input("Success? (y/n)")
-            success = success.lower() == "y"
-            critique = input("Enter your critique:")
+            success = input("Success? (y/n)").lower() in ["y", ""]
+            critique = input("Enter your critique:") if not success else ""
             print(f"Success: {success}\nCritique: {critique}")
-            confirmed = input("Confirm? (y/n)") in ["y", ""]
+            confirmed = input("Confirm? (y/n)").lower() in ["y", ""]
         return success, critique
 
     def _ai_check_task_success(self, messages, max_retries=5):
