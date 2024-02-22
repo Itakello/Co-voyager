@@ -1,6 +1,8 @@
 import configparser
 import os
 
+import voyager.utils as U
+
 # Load configuration from INI file
 config = configparser.ConfigParser()
 config.read("config.ini")
@@ -21,3 +23,14 @@ def get_azure_login():
         "version": config.get("azure_login", "version"),
     }
     return azure_login
+
+
+def fix_folders():
+    U.file_utils.f_remove("ckpt")
+    U.file_utils.f_remove(
+        "C:\\Users\\maxst\\AppData\\Roaming\\.minecraft\\saves\\Superflat"
+    )
+    U.file_utils.f_copy(
+        "C:\\Users\\maxst\\AppData\\Roaming\\.minecraft\\saves\\Superflat-template",
+        "C:\\Users\\maxst\\AppData\\Roaming\\.minecraft\\saves\\Superflat",
+    )
