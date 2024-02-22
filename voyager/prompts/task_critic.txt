@@ -1,0 +1,30 @@
+After analyzing the provided task description and the structured instructions generated, evaluate the creation of sub_tasks based on the specified rules and output requirements.
+
+Evaluation Criteria:
+1. Check if the instructions follow a logical sequence from gathering materials, through processing (crafting, smelting), to final construction or utilization.
+2. Ensure that for "Gather" and "Smelt" actions, "quantity" is set to -1 to indicate an unspecified number of materials. The "quantity" of "Gather" and "Smelt" should be a positive integer ONLY if they are the final product of the task.
+3. Verify that materials are specified as needed to perform the action on a single item, providing clear and precise instructions.
+
+Output: Provide specific feedback on any issues identified.
+
+Example:
+Previous subdivision:
+...
+    {
+        "action": "gather",
+        "item": "diamond raw",
+        "tools": "iron pickaxe",
+        "materials": "None",
+        "quantity": -1
+    },
+    {
+        "action": "craft",
+        "item": "diamond pickaxe",
+        "tools": "crafting table",
+        "materials": "3 diamonds, 2 sticks",
+        "quantity": 1
+    }
+...
+Task: Craft a diamond pickaxe.
+Error: Material [diamond raw] was not previously gathered/crafted/smelted.
+Critique: The smelt action is missing for the diamond raw in order to obtain the diamonds needed for crafting the diamond pickaxe.

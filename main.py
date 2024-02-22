@@ -34,9 +34,9 @@ for skill_library in [
 
         voyager = Voyager(
             env=env,
-            action_agent=action_agent,
+            skill_manager=action_agent,
             curriculum_agent=curriculum_agent,
-            critic_agent=critic_agent,
+            task_critic_agent=critic_agent,
             skill_manager=skill_manager,
             recorder=recorder,
         )

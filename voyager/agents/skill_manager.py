@@ -1,28 +1,45 @@
 import re
 import time
 from dataclasses import dataclass, field
+from typing import Union
 
 from javascript import require
 from langchain.prompts import SystemMessagePromptTemplate
-from langchain.schema import AIMessage, HumanMessage, SystemMessage
+from langchain.schema import HumanMessage, SystemMessage
+from langchain_community.chat_models import ChatOllama
+from langchain_openai.chat_models import ChatOpenAI
+from langchain_openai.chat_models.azure import AzureChatOpenAI
 
 from voyager.classes.subtask import SubTask
 from voyager.control_primitives_context import load_control_primitives_context
 from voyager.prompts import load_prompt
 from voyager.utils.llms import get_llm
 
+from .skill_critic import SkillCritic
+from .skill_descriptor import SkillDescriptor
+
 
 @dataclass
-class ActionAgent:
-    temperature: int = 0
-    request_timeout: int = 120
-    MAX_RETRIES: int = 4
-    execution_error: bool = True
-    chest_memory: dict = field(default_factory=dict)
-    llm_type: str = "gpt-4"
+class SkillManager:
 
-    def __post_init__(self):
-        self.llm = get_llm(self.llm_type, self.temperature, self.request_timeout)
+    llm: Union[AzureChatOpenAI, ChatOpenAI, ChatOllama]
+    critic: SkillCritic
+    descriptor: SkillDescriptor
+    MAX_RETRIES: int = 4
+    chest_memory: dict = field(default_factory=dict)
+
+    def __init__(
+        self,
+        critic: SkillCritic,
+        descriptor: SkillDescriptor,
+        llm_type: str,
+        temperature: int = 0,
+        request_timeout: int = 240,
+    ):
+        self.llm = get_llm(llm_type, temperature, request_timeout)
+        self.critic = critic
+        self.descriptor = descriptor
+        self.chest_memory = {}
 
     def update_chest_memory(self, chests) -> None:
         for position, chest in chests.items():
@@ -58,7 +75,7 @@ class ActionAgent:
         return f"Chests:{chests_content}\n\n"
 
     def _get_skills_message(self) -> SystemMessage:
-        system_template = load_prompt("new_action_template")
+        system_template = load_prompt("skill_template")
         base_skills = [
             "exploreUntil",
             "mineBlock",
@@ -69,7 +86,7 @@ class ActionAgent:
             "mineflayer",
         ]
         programs = "\n\n".join(load_control_primitives_context(base_skills))
-        response_format = load_prompt("action_response_format")
+        response_format = load_prompt("skill_response_format")
         system_message_prompt = SystemMessagePromptTemplate.from_template(
             system_template
         )
@@ -108,11 +125,10 @@ class ActionAgent:
         code_content = f"\n{code}" if code else "No code in the first round"
         observation += f"Code from the last round:{code_content}\n\n"
 
-        if self.execution_error:
-            error_content = (
-                "\n" + "\n".join(error_messages) if error_messages else "No error"
-            )
-            observation += f"Execution error:{error_content}\n\n"
+        error_content = (
+            "\n" + "\n".join(error_messages) if error_messages else "No error"
+        )
+        observation += f"Execution error:{error_content}\n\n"
 
         chat_log_content = "\n" + "\n".join(chat_messages) if chat_messages else "None"
         observation += f"Chat log: {chat_log_content}\n\n"
@@ -145,7 +161,7 @@ class ActionAgent:
 
         observation += f"Materials required: {subtask.materials}\n\n"
 
-        observation += f"Tools required: {subtask.tool}\n\n"
+        observation += f"Tools required: {subtask.tools}\n\n"
 
         critique_content = critique if critique else "None"
         observation += f"Critique: {critique_content}\n\n"
@@ -157,11 +173,11 @@ class ActionAgent:
     ) -> str:
         system_message = self._get_skills_message()
         human_message = self.get_status_message(
-            events=events, code="", subtask=subtask, critique=critique
+            events=events, code=code, subtask=subtask, critique=critique
         )
         messages = [system_message, human_message]
         print(
-            f"\033[32m****Action Agent human message****\n{human_message.content}\033[0m"
+            f"\033[32m****Skill manager human message****\n{human_message.content}\033[0m"
         )
         ai_message = self.llm.invoke(messages)
         return ai_message.content

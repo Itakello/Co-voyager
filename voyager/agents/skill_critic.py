@@ -1,6 +1,10 @@
 from dataclasses import dataclass
+from typing import Union
 
 from langchain.schema import HumanMessage, SystemMessage
+from langchain_community.chat_models import ChatOllama
+from langchain_openai.chat_models import ChatOpenAI
+from langchain_openai.chat_models.azure import AzureChatOpenAI
 
 from voyager.prompts import load_prompt
 from voyager.utils.json_utils import fix_and_parse_json
@@ -8,14 +12,16 @@ from voyager.utils.llms import get_llm
 
 
 @dataclass
-class CriticAgent:
-    temperature: int = 0
-    request_timeout: int = 120
-    mode: str = "auto"
-    llm_type: str = "gpt-4"
+class SkillCritic:
 
-    def __post_init__(self):
-        self.llm = get_llm(self.llm_type, self.temperature, self.request_timeout)
+    llm: Union[AzureChatOpenAI, ChatOpenAI, ChatOllama]
+    mode: str
+
+    def __init__(
+        self, llm_type: str, mode: str, temperature: int = 0, request_timeout: int = 240
+    ):
+        self.llm = get_llm(llm_type, temperature, request_timeout)
+        self.mode = mode
         assert self.mode in ["auto", "manual"]
 
     def check_task_success(
