@@ -10,4 +10,5 @@ voyager = Voyager(
     resume=False,
 )
 
-voyager.learn()
+tasks = voyager.decompose_task(task="Craft a Diamond Pickaxe")
+voyager.inference(tasks=tasks)
