@@ -53,7 +53,7 @@
     "item": "iron ingot",
     "tools": "furnace",
     "materials": "1 iron raw, 1 wood plank",
-    "quantity": 3
+    "quantity": 5
   },
   {
     "action": "craft",
@@ -64,16 +64,16 @@
   },
   {
     "action": "gather",
-    "item": "diamonds",
+    "item": "redstone dust",
     "tools": "iron pickaxe",
     "materials": "None",
-    "quantity": -1
+    "quantity": 1
   },
   {
     "action": "craft",
-    "item": "diamond pickaxe",
+    "item": "compass",
     "tools": "crafting table",
-    "materials": "3 diamonds, 2 sticks",
+    "materials": "4 iron ingots, 1 redstone dust",
     "quantity": 1
   }
 ]

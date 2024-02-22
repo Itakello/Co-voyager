@@ -36,9 +36,9 @@ skill_manager = SkillManager(
     llm_type="gpt-4",
     critic=SkillCritic(
         llm_type="gpt-4",
-        mode="manual",
+        mode="auto",
     ),
-    descriptor=SkillDescriptor(dir=task_manager.dir, llm_type="gpt-4"),
+    descriptor=SkillDescriptor(dir=task_manager.dir, llm_type="gpt-3.5-turbo"),
 )
 pairs_manager = PairsManager(dir=task_manager.dir)
 

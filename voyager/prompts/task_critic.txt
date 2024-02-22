@@ -2,8 +2,10 @@ After analyzing the provided task description and the structured instructions ge
 
 Evaluation Criteria:
 1. Check if the instructions follow a logical sequence from gathering materials, through processing (crafting, smelting), to final construction or utilization.
-2. Ensure that for "Gather" and "Smelt" actions, "quantity" is set to -1 to indicate an unspecified number of materials. The "quantity" of "Gather" and "Smelt" should be a positive integer ONLY if they are the final product of the task.
+2. Ensure that for the "Gather" actions, "quantity" is set to -1 to indicate an unspecified number of materials.
 3. Verify that materials are specified as needed to perform the action on a single item, providing clear and precise instructions.
+4. Verify that the materials only have materials (without tools) and viceversa. For example, the "stone pickaxe" should not be present in a "materials" field.
+5. Do not include crafting of sticks and wood planks as individual subtasks.
 
 Output: Provide specific feedback on any issues identified.
 

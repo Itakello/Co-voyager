@@ -36,17 +36,14 @@ class SkillCritic:
         )
         if self.mode == "manual":
             success, critique = self._human_check_task_success()
-        elif self.mode == "auto":
-
+        else:
             messages = [
-                SystemMessage(content=load_prompt("critic")),
+                SystemMessage(content=load_prompt("skill_critic")),
                 human_message,
             ]
             success, critique = self._ai_check_task_success(
                 messages=messages, max_retries=max_retries
             )
-        else:
-            raise ValueError(f"Invalid critic agent mode: {self.mode}")
         return success, critique
 
     def _get_status_message(self, *, events, task, chest_observation):

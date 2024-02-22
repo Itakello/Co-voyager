@@ -4,15 +4,12 @@ Possible Tasks: Craft, Gather, Kill, Shoot, Smelt, Build
 
 Rules:
 
-1. Structure instructions to follow a logical sequence from gathering materials, through processing (crafting, smelting), to final construction or utilization. You will never find the final product (e.g., wood planks or diamond ingots) directly in the environment, so you must first gather the raw material (e.g., wood logs or diamond raws) and then craft or smelt it, before using it. Ensure tasks are ordered for the most efficient progression.
-
-2. For the "Gather" and "Smelt" actions, set "quantity" to -1 to indicate an unspecified number of materials to be collected or smelted. Set the "quantity" to a positive integer ONLY if they are the final product of the task.
-
+1. Structure instructions to follow a logical sequence from gathering materials, through processing (crafting, smelting), to final construction or utilization. You will never find the final product (e.g., wood planks or iron ingots) directly in the environment, so you must first gather the raw material (e.g., wood logs or iron raws) and then craft or smelt it, before using it. Ensure tasks are ordered for the most efficient progression.
+2. For the "Gather" actions, set "quantity" to -1 to indicate an unspecified number of materials to be collected.
 3. Specify materials as needed to perform the action on a single item, providing clear and precise instructions for each task.
-
 4. Do not include crafting of sticks and wood planks as individual subtasks.
-
-5. The output is in JSON format and should be parsed using `json.loads()` to facilitate integration into automated systems or further processing.
+5. Never mix the materials with the tools.
+6. The output is in JSON format and should be parsed using `json.loads()` to facilitate integration into automated systems or further processing.
 
 Example:
 Task: Smelt 2 iron ingots.

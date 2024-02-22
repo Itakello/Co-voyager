@@ -64,7 +64,7 @@
   },
   {
     "action": "gather",
-    "item": "diamonds",
+    "item": "diamond raws",
     "tools": "iron pickaxe",
     "materials": "None",
     "quantity": -1
@@ -73,7 +73,7 @@
     "action": "craft",
     "item": "diamond pickaxe",
     "tools": "crafting table",
-    "materials": "3 diamonds, 2 sticks",
+    "materials": "3 diamond raws, 2 sticks",
     "quantity": 1
   }
 ]

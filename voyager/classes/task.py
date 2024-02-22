@@ -133,7 +133,7 @@ class Task:
                 for tool in sub_task.tools:
                     if tool not in tools:
                         raise ValueError(
-                            f"Tool [{tool}] for task [{sub_task.content}] was not crafted."
+                            f"Tool [{tool}] for task [{sub_task.action} {sub_task.item}] was not crafted."
                         )
             if sub_task.action == "craft":
                 if sub_task.item in tools:
