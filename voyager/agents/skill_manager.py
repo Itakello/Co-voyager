@@ -10,6 +10,7 @@ from langchain_community.chat_models import ChatOllama
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_openai.chat_models.azure import AzureChatOpenAI
 
+import voyager.utils as U
 from voyager.classes.subtask import SubTask
 from voyager.control_primitives_context import load_control_primitives_context
 from voyager.prompts import load_prompt
@@ -25,21 +26,30 @@ class SkillManager:
     llm: Union[AzureChatOpenAI, ChatOpenAI, ChatOllama]
     critic: SkillCritic
     descriptor: SkillDescriptor
-    MAX_RETRIES: int = 4
+    skills_path: str
+    file_path: str
     chest_memory: dict = field(default_factory=dict)
+    MAX_RETRIES: int = 4
 
     def __init__(
         self,
+        dir: str,
         critic: SkillCritic,
         descriptor: SkillDescriptor,
         llm_type: str,
+        resume: bool,
         temperature: int = 0,
         request_timeout: int = 240,
     ):
         self.llm = get_llm(llm_type, temperature, request_timeout)
         self.critic = critic
         self.descriptor = descriptor
-        self.chest_memory = {}
+        self.file_path = f"{dir}/chest_memory.json"
+        if U.f_exists(self.file_path) and resume:
+            self.chest_memory = U.load_json(self.file_path)
+        else:
+            self.chest_memory = {}
+            U.dump_json(self.chest_memory, self.file_path)
 
     def update_chest_memory(self, chests) -> None:
         for position, chest in chests.items():
@@ -57,6 +67,7 @@ class SkillManager:
                         f"\033[32mAction Agent saving chest {position}: {chest}\033[0m"
                     )
                     self.chest_memory[position] = chest
+        U.dump_json(self.chest_memory, self.file_path)
 
     def render_chest_observation(self) -> str:
         chests = []

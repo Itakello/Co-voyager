@@ -1,12 +1,5 @@
 [
   {
-    "action": "gather",
-    "item": "wood log",
-    "tools": "None",
-    "materials": "None",
-    "quantity": -1
-  },
-  {
     "action": "craft",
     "item": "crafting table",
     "tools": "None",
@@ -67,7 +60,7 @@
     "item": "diamonds",
     "tools": "iron pickaxe",
     "materials": "None",
-    "quantity": -1
+    "quantity": 3
   },
   {
     "action": "craft",

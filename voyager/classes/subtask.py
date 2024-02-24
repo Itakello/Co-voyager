@@ -10,6 +10,7 @@ class SubTask:
     item: str
     quantity: int
     content: str = ""
+    content_doing: str = ""
     tools: list[str] = field(default_factory=list)
     materials: list[Material] = field(default_factory=list)
     status: Status = Status.BLOCKED
@@ -47,15 +48,21 @@ class SubTask:
                 self.content += " and place it on the ground 1 block right the chest."
 
         elif self.action in ["gather", "craft", "smelt"]:
-            self.content += " and place them in the chest."
+            self.content += " and place it/them in the chest."
+        elif self.action == "kill":
+            self.content += " using killMob (already present)."
         if self.tools != []:
-            self.content += f"Then place the tools back in the chest."
+            if self.tools[0] not in ["crafting table", "furnace"]:
+                tools = " and the ".join(self.tools)
+                self.content += f" Then place the {tools} back in the chest."
+
+        self.content_doing = f"{self.action}ing {self.quantity} {self.item}"
 
     def __str__(self) -> str:
         return f"{self.content} ({self.status.value})"
 
-    def _parse_materials(self, materials: str) -> list[Material]:
-        splitted_materials = materials.split(", ")
+    def _parse_materials(self, materials_str: str) -> list[Material]:
+        splitted_materials = materials_str.split(", ")
         materials = []
         for material in splitted_materials:
             material = material.split(" ")
@@ -70,7 +77,7 @@ class SubTask:
             return word[:-1]
         return word
 
-    def update_status_to_ready(self, inventory: dict) -> None:
+    def update_statuses_to_ready(self, inventory: dict) -> None:
         if self.status != Status.BLOCKED:
             return
         required_tools = all(tool in inventory for tool in self.tools)

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import wandb
 
-from .agents import PairsManager, SkillManager, TaskManager
+from .agents import PairsManager, SkillManager
 from .classes import SubTask
 from .env import VoyagerEnv
 
@@ -11,53 +11,67 @@ from .env import VoyagerEnv
 class Voyager:
 
     env: VoyagerEnv
-    task_manager: TaskManager
     skill_manager: SkillManager
     pairs_manager: PairsManager
 
-    def execute_task(
-        self,
-        starting_position: tuple[int, int, int] = (-14, -60, -4),
-        reset_mode: str = "hard",
-    ) -> None:
+    def reset(self, starting_position: tuple[int, int, int]) -> None:
         self.env.reset(
-            mode=reset_mode,
+            mode="hard",
         )
-        pass
+        self._chat(
+            f"/tp {starting_position[0]} {starting_position[1]} {starting_position[2]}"
+        )
+        self._chat(f"/time set day")
 
-    def learn_task(
+    def execute(
         self,
-        starting_position: tuple[int, int, int] = (-14, -60, -4),
-        reset_mode: str = "hard",
-    ):
-        self.env.reset(
-            mode=reset_mode,
+        sub_task: SubTask,
+    ) -> None:
+        print(f"\033[35mExecuting sub_task [{sub_task.content}]\033[0m")
+        performed = False
+        for _ in range(3):
+            try:
+                retries = self._execute_task(
+                    sub_task=sub_task,
+                )
+                performed = True
+                break
+            except Exception as e:
+                print("Your last round rollout terminated due to error:")
+                print(f"\033[41m{e}\033[0m")
+        if not performed:
+            raise ValueError("Rollout failed")
+        wandb.log({"retries": retries})
+
+    def learn_task(self, sub_task: SubTask, index: int) -> None:
+        print(f"\033[35m[{index}] [{sub_task.content}]\033[0m")
+        performed = False
+        for _ in range(3):
+            try:
+                retries = self._learn_skill(
+                    sub_task=sub_task,
+                )
+                performed = True
+                break
+            except Exception as e:
+                print("Your last round rollout terminated due to error:")
+                print(f"\033[41m{e}\033[0m")
+        if not performed:
+            raise ValueError("Rollout failed")
+        wandb.log({"retries": retries})
+
+    def _execute_task(self, sub_task: SubTask) -> None:
+        events = self._get_checkpoint()
+        skill_name = self.pairs_manager.get_skill_name(sub_task.content)
+        skill_code = self.skill_manager.descriptor.skills[skill_name]["executable_code"]
+        self.skill_manager.update_chest_memory(events[-1][1]["nearbyChests"])
+        events = self.env.step(
+            code=skill_code,
+            programs=self.skill_manager.descriptor.programs,
         )
-        self.env.step(
-            f"bot.chat(`/tp {starting_position[0]} {starting_position[1]} {starting_position[2]}`);\n"
-            + "bot.chat(`/time set day`);",
-        )
-        for sub_task in self.task_manager.task.sub_tasks:
-            print(
-                f"\033[35mLearning task [{sub_task.content}] for at most {self.skill_manager.MAX_RETRIES} times\033[0m"
-            )
-            performed = False
-            for _ in range(3):
-                try:
-                    retries = self._learn_skill(
-                        sub_task=sub_task,
-                    )
-                    performed = True
-                    break
-                except Exception as e:
-                    print("Your last round rollout terminated due to error:")
-                    print(f"\033[41m{e}\033[0m")
-            if not performed:
-                raise ValueError("Rollout failed")
-            wandb.log({"retries": retries})
 
     def _learn_skill(self, sub_task: SubTask) -> int:
-        events = self.env.step("")
+        events = self._get_checkpoint()
         success = False
         code = ""
         critique = ""
@@ -75,7 +89,6 @@ class Voyager:
                 code=full_code,
                 programs=self.skill_manager.descriptor.programs,
             )
-            events = self.env.step("")
             self.skill_manager.update_chest_memory(events[-1][1]["nearbyChests"])
             success, critique = self.skill_manager.critic.check_task_success(
                 events=events,
@@ -94,4 +107,13 @@ class Voyager:
                     task=sub_task.content, skill=program_name
                 )
                 break
+
         return iter + 1
+
+    def _chat(self, call: str) -> dict:
+        events = self.env.step(f"bot.chat(`{call}`);")
+        return events
+
+    def _get_checkpoint(self) -> dict:
+        events = self.env.step("")
+        return events

@@ -1,0 +1,58 @@
+[
+  {
+    "action": "craft",
+    "item": "crafting table",
+    "tools": "None",
+    "materials": "4 wood planks",
+    "quantity": 1
+  },
+  {
+    "action": "craft",
+    "item": "wooden pickaxe",
+    "tools": "crafting table",
+    "materials": "3 wood planks, 2 sticks",
+    "quantity": 1
+  },
+  {
+    "action": "gather",
+    "item": "cobblestone",
+    "tools": "wooden pickaxe",
+    "materials": "None",
+    "quantity": 8
+  },
+  {
+    "action": "craft",
+    "item": "furnace",
+    "tools": "crafting table",
+    "materials": "8 cobblestones",
+    "quantity": 1
+  },
+  {
+    "action": "craft",
+    "item": "wooden sword",
+    "tools": "crafting table",
+    "materials": "2 wood planks, 1 stick",
+    "quantity": 1
+  },
+  {
+    "action": "kill",
+    "item": "pig",
+    "tools": "wooden sword",
+    "materials": "None",
+    "quantity": 1
+  },
+  {
+    "action": "gather",
+    "item": "raw porkchop",
+    "tools": "None",
+    "materials": "None",
+    "quantity": 1
+  },
+  {
+    "action": "smelt",
+    "item": "cooked porkchop",
+    "tools": "furnace",
+    "materials": "1 raw porkchop, 1 wood plank",
+    "quantity": 1
+  }
+]

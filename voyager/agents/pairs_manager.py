@@ -31,7 +31,7 @@ class PairsManager:
         self.pairs[task] = skill
         U.dump_json(self.pairs, self.file_path)
 
-    def get_skill(self, task: str) -> str:
+    def get_skill_name(self, task: str) -> str:
         if task not in self.pairs:
             raise ValueError(f"Task {task} not found in pairs")
         return self.pairs[task]

@@ -1,4 +1,5 @@
 import json
+import os
 from dataclasses import dataclass
 from typing import Union
 
@@ -37,16 +38,34 @@ class TaskManager:
 
         name, content = self._get_task_descriptors()
         self.dir = U.f_mkdir(f"tasks/{name}")
+        with open(f"{self.dir}/task_content.txt", "w") as f:
+            f.write(content)
         self.sub_tasks_path = f"{self.dir}/sub_tasks.json"
         self.task = self._get_task(name=name, content=content)
 
     def _get_task_descriptors(self) -> tuple[str, str]:
-        name = input("Enter the task name (e.g. 'cobblestone_pickaxe'): ")
-        if name == "":
-            name = "diamond_pickaxe"
-        content = input("Enter the task content (e.g. 'Craft a Cobblestone Pickaxe'): ")
-        if content == "":
-            content = "Craft a Diamond Pickaxe"
+        confirmed = False
+        while not confirmed:
+            old_task = input("Is this an old task? (y/n): ") in ["y", ""]
+            if old_task:
+                possible_tasks = os.listdir("tasks")
+                poassible_tasks_str = "\n".join(
+                    [f"{i+1}. {agent}" for i, agent in enumerate(possible_tasks)]
+                )
+                name = possible_tasks[
+                    int(input(f"Which of these?\n{poassible_tasks_str}\nINPUT: ")) - 1
+                ]
+                content = U.load_text(f"tasks/{name}/task_content.txt")
+            else:
+                name = input("Enter the task name (e.g. 'cobblestone_pickaxe'): ")
+                if name == "":
+                    name = "diamond_pickaxe"
+                content = input(
+                    "Enter the task content (e.g. 'Craft a Cobblestone Pickaxe'): "
+                )
+                if content == "":
+                    content = "Craft a Diamond Pickaxe"
+            confirmed = input(f"Confirm? ") in ["y", ""]
         return name, content
 
     def _get_task(self, name: str, content: str) -> Task:

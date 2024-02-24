@@ -25,10 +25,21 @@ class SkillCritic:
         assert self.mode in ["auto", "manual"]
 
     def check_task_success(
-        self, events, task, chest_observation, max_retries=5
+        self, events: dict, task: str, chest_observation: str, max_retries: int = 5
     ) -> tuple[bool, str]:
         success = False
         critique = ""
+        if "1 block" in task:
+            task = task.split(" 1 block")[0] + "."
+        if ". Then place" in task:
+            task = task.split(" Then place")[0] + ""
+        if (
+            "crafting table" not in task
+            and "furnace" not in task
+            and " and place" in task
+        ):
+            task = task.split(" and place")[0] + "."
+            task += " It's ok if they are in the inventory or in the chest."
         human_message = self._get_status_message(
             events=events,
             task=task,

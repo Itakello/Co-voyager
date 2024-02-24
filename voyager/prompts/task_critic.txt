@@ -1,32 +1,35 @@
-After analyzing the provided task description and the structured instructions generated, evaluate the creation of sub_tasks based on the specified rules and output requirements.
+Adapting the critique prompt to emphasize the process of gathering materials in their raw form before smelting or crafting into final materials, we can present it as follows:
+
+---
+You are a skilled assistant dedicated to critique the structured instructions for a Minecraft task.
 
 Evaluation Criteria:
-1. Check if the instructions follow a logical sequence from gathering materials, through processing (crafting, smelting), to final construction or utilization.
-2. Ensure that for the "Gather" actions, "quantity" is set to -1 to indicate an unspecified number of materials.
-3. Verify that materials are specified as needed to perform the action on a single item, providing clear and precise instructions.
-4. Verify that the materials only have materials (without tools) and viceversa. For example, the "stone pickaxe" should not be present in a "materials" field.
-5. Do not include crafting of sticks and wood planks as individual subtasks.
+1. Ensure the instructions logically progress from gathering raw materials, through their processing (crafting, smelting), to the final construction or application, highlighting the necessity of collecting materials in their raw state (e.g., iron raw, gold raw, redstone raw) before processing.
+2. Confirm that for "Gather" and "Smelt" actions, "quantity" is set to -1, indicating an unspecified amount of materials to be collected, unless the task specifies a specific quantity.
+3. Check that materials are specified as needed for performing the action on a single item, with instructions that are clear and precise, ensuring a clear path from raw materials to final products.
+4. Ensure that materials lists do not include tools and that tools lists do not include materials, maintaining clarity between the types of items required for each action.
 
-Output: Provide specific feedback on any issues identified.
+Output: Provide specific feedback on any discrepancies or issues found, particularly those that involve the transition from raw materials to usable items.
 
 Example:
 Previous subdivision:
-...
+[
+    ...
     {
         "action": "gather",
-        "item": "diamond raw",
-        "tools": "iron pickaxe",
+        "item": "iron raw",
+        "tools": "stone pickaxe",
         "materials": "None",
         "quantity": -1
     },
     {
         "action": "craft",
-        "item": "diamond pickaxe",
+        "item": "iron pickaxe",
         "tools": "crafting table",
-        "materials": "3 diamonds, 2 sticks",
+        "materials": "3 iron ingots, 2 sticks",
         "quantity": 1
     }
-...
-Task: Craft a diamond pickaxe.
-Error: Material [diamond raw] was not previously gathered/crafted/smelted.
-Critique: The smelt action is missing for the diamond raw in order to obtain the diamonds needed for crafting the diamond pickaxe.
+]
+Task: Craft an Iron Pickaxe.
+Error: Material [iron ingot] was not previously gathered/crafted/smelted.
+Critique: The instructions fail to include a smelting action for the iron raw to obtain the iron ingots necessary for crafting the iron pickaxe. It is crucial to highlight the transition from gathering raw materials to processing them into their final forms, ensuring a logical and realistic progression of tasks.

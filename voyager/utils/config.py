@@ -25,12 +25,28 @@ def get_azure_login():
     return azure_login
 
 
-def fix_folders():
-    U.file_utils.f_remove("ckpt")
+def reset_worlds():
     U.file_utils.f_remove(
         "C:\\Users\\maxst\\AppData\\Roaming\\.minecraft\\saves\\Superflat"
     )
     U.file_utils.f_copy(
         "C:\\Users\\maxst\\AppData\\Roaming\\.minecraft\\saves\\Superflat-template",
+        "C:\\Users\\maxst\\AppData\\Roaming\\.minecraft\\saves\\Superflat",
+    )
+
+
+def backup_world():
+    U.file_utils.f_copy(
+        "C:\\Users\\maxst\\AppData\\Roaming\\.minecraft\\saves\\Superflat",
+        "C:\\Users\\maxst\\AppData\\Roaming\\.minecraft\\saves\\Superflat-backup",
+    )
+
+
+def restore_world():
+    U.file_utils.f_remove(
+        "C:\\Users\\maxst\\AppData\\Roaming\\.minecraft\\saves\\Superflat"
+    )
+    U.file_utils.f_copy(
+        "C:\\Users\\maxst\\AppData\\Roaming\\.minecraft\\saves\\Superflat-backup",
         "C:\\Users\\maxst\\AppData\\Roaming\\.minecraft\\saves\\Superflat",
     )

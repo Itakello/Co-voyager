@@ -125,3 +125,17 @@ RESPONSE
     "success": false,
     "critique": "Deposit more useless items such as copper_block, diorite, granite, cobbled_deepslate, feather, and leather to meet the requirement of having only 20 occupied slots in your inventory."
 }
+
+INPUT:
+Nearby blocks: {..., chest, ...}
+
+Chests:
+(-14, -60, 2): {'oak_planks': 12, 'stick': 8}
+Task: Craft 1 crafting table and place it on the ground 1 block left the chest.
+
+RESPONSE:
+{
+    "reasoning": "In the nearby blocks, there is a crafting table, which means you have crafted and placed it. However, the position of the crafting table is not specified, so it's unclear if it's placed 1 block left of the chest.",
+    "success": false,
+    "critique": "Make sure to place the crafting table 1 block left of the chest as required by the task."
+}
