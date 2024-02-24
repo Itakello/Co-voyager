@@ -14,8 +14,8 @@ from voyager.utils.components import get_environment
 from voyager.utils.config import get_azure_login, set_openai_config
 
 os.environ["WANDB_MODE"] = "offline"
-RESUME = True
-INDEX_TASK = 8
+RESUME = False
+INDEX_TASK = 0
 
 wandb.init(
     project="Co-Voyager",
@@ -56,15 +56,16 @@ voyager = Voyager(
 
 voyager.reset(starting_position=(-14, -60, -4))
 
-if RESUME:
-    task_manager.task.sub_tasks = task_manager.task.sub_tasks[INDEX_TASK:]
+# if RESUME:
+# task_manager.task.sub_tasks = task_manager.task.sub_tasks[INDEX_TASK:]
 
 for i, sub_task in enumerate(task_manager.task.sub_tasks):
     index = i + INDEX_TASK if RESUME else i
     voyager.learn_task(sub_task=sub_task, index=index)
 
-# for sub_task in task_manager.task.sub_tasks:
-# voyager.execute(sub_task=sub_task)
+# for i, sub_task in enumerate(task_manager.task.sub_tasks):
+#    index = i + INDEX_TASK if RESUME else i
+#    voyager.execute(sub_task=sub_task, index=index)
 
 
 wandb.finish()

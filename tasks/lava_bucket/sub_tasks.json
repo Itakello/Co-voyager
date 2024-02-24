@@ -1,0 +1,65 @@
+[
+  {
+    "action": "craft",
+    "item": "crafting table",
+    "tools": "None",
+    "materials": "4 wood planks",
+    "quantity": 1
+  },
+  {
+    "action": "craft",
+    "item": "wooden pickaxe",
+    "tools": "crafting table",
+    "materials": "3 wood planks, 2 sticks",
+    "quantity": 1
+  },
+  {
+    "action": "gather",
+    "item": "cobblestone",
+    "tools": "wooden pickaxe",
+    "materials": "None",
+    "quantity": -1
+  },
+  {
+    "action": "craft",
+    "item": "cobblestone pickaxe",
+    "tools": "crafting table",
+    "materials": "3 cobblestones, 2 sticks",
+    "quantity": 1
+  },
+  {
+    "action": "gather",
+    "item": "iron raws",
+    "tools": "cobblestone pickaxe",
+    "materials": "None",
+    "quantity": 3
+  },
+  {
+    "action": "craft",
+    "item": "furnace",
+    "tools": "crafting table",
+    "materials": "8 cobblestones",
+    "quantity": 1
+  },
+  {
+    "action": "smelt",
+    "item": "iron ingot",
+    "tools": "furnace",
+    "materials": "1 iron raw, 1 wood plank",
+    "quantity": 3
+  },
+  {
+    "action": "craft",
+    "item": "iron bucket",
+    "tools": "crafting table",
+    "materials": "3 iron ingots",
+    "quantity": 1
+  },
+  {
+    "action": "gather",
+    "item": "lava",
+    "tools": "iron bucket",
+    "materials": "None",
+    "quantity": 1
+  }
+]

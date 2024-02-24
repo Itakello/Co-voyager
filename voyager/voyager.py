@@ -26,8 +26,9 @@ class Voyager:
     def execute(
         self,
         sub_task: SubTask,
+        index: int,
     ) -> None:
-        print(f"\033[35mExecuting sub_task [{sub_task.content}]\033[0m")
+        print(f"\033[35m [{index}] [{sub_task.content}]\033[0m")
         performed = False
         for _ in range(3):
             try:
