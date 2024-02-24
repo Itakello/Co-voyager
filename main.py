@@ -13,12 +13,17 @@ voyager = Voyager(
 )
 
 sub_goals = [
-    "Punch 3 trees",
-    "Craft 1 crafting table",
-    "Place the crafting table",
-    "Craft 4 wooden planks",
-    "Craft 2 sticks",
-    "Mine 3 cobblestone",
-    "Craft 1 stone pickaxe",
-]  # voyager.decompose_task("Craft a Stone Pickaxe")
+    "Gather 5 wood logs.",
+    "Craft 20 wood planks.",
+    "Craft 8 stick.",
+    "Craft 1 crafting table.",
+    "Craft 1 wooden pickaxe.",
+    "Gather 11 cobblestone.",
+    "Craft 1 stone pickaxe.",
+    "Gather 7 iron raws.",
+    "Smelt 7 iron ingot.",
+    "Craft 1 iron pickaxe.",
+    "Gather 1 redstone dust.",
+    "Craft 1 compass.",
+]
 voyager.inference(sub_goals=sub_goals)
