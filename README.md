@@ -1,165 +1,159 @@
-# Voyager: An Open-Ended Embodied Agent with Large Language Models
-<div align="center">
+# Co-Voyager: Cooperative Task Decomposition for Minecraft
 
-[[Website]](https://voyager.minedojo.org/)
-[[Arxiv]](https://arxiv.org/abs/2305.16291)
-[[PDF]](https://voyager.minedojo.org/assets/documents/voyager.pdf)
-[[Tweet]](https://twitter.com/DrJimFan/status/1662115266933972993?s=20)
+Co-Voyager is a **fork of [Voyager](https://github.com/MineDojo/Voyager)** that extends the original open-ended embodied agent into a framework that **collaborates with humans or multiple AI agents** to solve complex, goal-oriented tasks in Minecraft.
 
-[![Python Version](https://img.shields.io/badge/Python-3.9-blue.svg)](https://github.com/MineDojo/Voyager)
-[![GitHub license](https://img.shields.io/github/license/MineDojo/Voyager)](https://github.com/MineDojo/Voyager/blob/main/LICENSE)
-______________________________________________________________________
+This repository was developed as the final project for the *Grounded Language Processing (GLP)* course at the **University of Trento**.
+
+---
+
+## Table of Contents
+1. [Motivation](#motivation)
+2. [Key Differences from Voyager](#key-differences-from-voyager)
+3. [Quick Start](#quick-start)
+4. [Project Structure](#project-structure)
+5. [Experiments & Results](#experiments--results)
+6. [Citation](#citation)
+7. [License](#license)
+8. [Project Status & Lessons Learned](#project-status--lessons-learned)
+
+---
+
+## Motivation
+Large Language Model (LLM) agents such as Voyager exhibit impressive **lifelong learning** abilities but are limited when multiple subtasks must be carried out **in parallel** or when **human cooperation** is needed.  Co-Voyager addresses this by introducing a task-centric architecture that:
+
+* Decomposes high-level goals into JSON subtasks that are easy to parse.
+* Distributes those subtasks between **human players and AI agents**.
+* Re-uses skills within the same execution via an explicit *Pair Manager*.
+* Enforces correctness through a *Task Critic* that iteratively refines plans.
+
+> **Note** The Minecraft world used in our experiments was **hand-crafted** to provide a minimal, noise-free arena for evaluation.  The world file is **not included** in this repository, so results cannot be reproduced one-to-one without rebuilding a similar map.
+
+![In-game Environment](assets/environment.png)
 
 
-https://github.com/MineDojo/Voyager/assets/25460983/ce29f45b-43a5-4399-8fd8-5dd105fd64f2
+## Key Differences from Voyager
+| Component            | Voyager                               | Co-Voyager |
+|----------------------|----------------------------------------|------------|
+| **Task Manager**     | Simple curriculum for exploration      | JSON-based hierarchical **task decomposition** with dependencies |
+| **Skill Generation** | Few-shot examples + skill library      | **Primitive-only** generation, checks for materials & tools |
+| **Skill Re-use**     | Global skill library across sessions   | *Pair Manager* re-uses skills **within the same task** |
+| **Criticism**        | Skill-level critic                     | **Task-level critic** that validates entire plan |
+| **Parallelism**      | Single autonomous agent                | Designed for **multi-agent / human-AI cooperation** |
 
-![](images/pull.png)
+<p align="center">
+  <img src="assets/voyager_vs_co-voyager.png" alt="Voyager vs Co-Voyager architecture"/>
+</p>
 
+## Quick Start
+### 1. Prerequisites
+* Python ≥ 3.9
+* Node.js ≥ 16
+* Minecraft Java Edition (1.19 with Fabric loader 0.14.18)
+* An **OpenAI API key** (for GPT-4 or GPT-3.5-Turbo)
 
-</div>
+### 2. Installation
+```bash
+# clone repository
+git clone https://github.com/<your-user>/Co-voyager.git
+cd Co-voyager
 
-We introduce Voyager, the first LLM-powered embodied lifelong learning agent
-in Minecraft that continuously explores the world, acquires diverse skills, and
-makes novel discoveries without human intervention. Voyager consists of three
-key components: 1) an automatic curriculum that maximizes exploration, 2) an
-ever-growing skill library of executable code for storing and retrieving complex
-behaviors, and 3) a new iterative prompting mechanism that incorporates environment
-feedback, execution errors, and self-verification for program improvement.
-Voyager interacts with GPT-4 via blackbox queries, which bypasses the need for
-model parameter fine-tuning. The skills developed by Voyager are temporally
-extended, interpretable, and compositional, which compounds the agent’s abilities
-rapidly and alleviates catastrophic forgetting. Empirically, Voyager shows
-strong in-context lifelong learning capability and exhibits exceptional proficiency
-in playing Minecraft. It obtains 3.3× more unique items, travels 2.3× longer
-distances, and unlocks key tech tree milestones up to 15.3× faster than prior SOTA.
-Voyager is able to utilize the learned skill library in a new Minecraft world to
-solve novel tasks from scratch, while other techniques struggle to generalize.
-
-In this repo, we provide Voyager code. This codebase is under [MIT License](LICENSE).
-
-# Installation
-Voyager requires Python ≥ 3.9 and Node.js ≥ 16.13.0. We have tested on Ubuntu 20.04, Windows 11, and macOS. You need to follow the instructions below to install Voyager.
-
-## Python Install
-```
-git clone https://github.com/MineDojo/Voyager
-cd Voyager
+# python dependencies
 pip install -e .
-```
 
-## Node.js Install
-In addition to the Python dependencies, you need to install the following Node.js packages:
-```
+# node dependencies (for Mineflayer backend)
 cd voyager/env/mineflayer
-npm install -g npx
-npm install
-cd mineflayer-collectblock
-npm install
-npx tsc
-cd ..
-npm install
+npm install -g npx && npm install
+cd mineflayer-collectblock && npm install && npx tsc
+cd ../../..
 ```
 
-## Minecraft Instance Install
+For setting up Minecraft and Fabric mods follow the guides in `installation/`.
 
-Voyager depends on Minecraft game. You need to install Minecraft game and set up a Minecraft instance.
+### 3. Running the Demo
+```bash
+python main.py
+```
+By default the script launches a run that asks the agent to **build a 4×4 wooden house with a fenced yard**.  Logs are tracked with *Weights & Biases*.
 
-Follow the instructions in [Minecraft Login Tutorial](installation/minecraft_instance_install.md) to set up your Minecraft Instance.
-
-## Fabric Mods Install
-
-You need to install fabric mods to support all the features in Voyager. Remember to use the correct Fabric version of all the mods. 
-
-Follow the instructions in [Fabric Mods Install](installation/fabric_mods_install.md) to install the mods.
-
-# Getting Started
-Voyager uses OpenAI's GPT-4 as the language model. You need to have an OpenAI API key to use Voyager. You can get one from [here](https://platform.openai.com/account/api-keys).
-
-After the installation process, you can run Voyager by:
+Alternatively you can use the lower-level API:
 ```python
 from voyager import Voyager
+from voyager.utils.components import get_agents, get_environment, get_recorder
+from voyager.utils.config import get_azure_login, set_openai_config
 
-# You can also use mc_port instead of azure_login, but azure_login is highly recommended
-azure_login = {
-    "client_id": "YOUR_CLIENT_ID",
-    "redirect_url": "https://127.0.0.1/auth-response",
-    "secret_value": "[OPTIONAL] YOUR_SECRET_VALUE",
-    "version": "fabric-loader-0.14.18-1.19", # the version Voyager is tested on
-}
-openai_api_key = "YOUR_API_KEY"
+set_openai_config()          # loads OPENAI_API_KEY from env vars
+azure_login = get_azure_login()
 
-voyager = Voyager(
-    azure_login=azure_login,
-    openai_api_key=openai_api_key,
-)
-
-# start lifelong learning
-voyager.learn()
-```
-
-* If you are running with `Azure Login` for the first time, it will ask you to follow the command line instruction to generate a config file.
-* For `Azure Login`, you also need to select the world and open the world to LAN by yourself. After you run `voyager.learn()` the game will pop up soon, you need to:
-  1. Select `Singleplayer` and press `Create New World`.
-  2. Set Game Mode to `Creative` and Difficulty to `Peaceful`.
-  3. After the world is created, press `Esc` key and press `Open to LAN`.
-  4. Select `Allow cheats: ON` and press `Start LAN World`. You will see the bot join the world soon. 
-
-# Resume from a checkpoint during learning
-
-If you stop the learning process and want to resume from a checkpoint later, you can instantiate Voyager by:
-```python
-from voyager import Voyager
+env = get_environment(azure_login)
+action_agent, curriculum_agent, critic_agent, skill_manager = get_agents()
+recorder = get_recorder()
 
 voyager = Voyager(
-    azure_login=azure_login,
-    openai_api_key=openai_api_key,
-    ckpt_dir="YOUR_CKPT_DIR",
-    resume=True,
+    env=env,
+    skill_manager=action_agent,
+    curriculum_agent=curriculum_agent,
+    task_critic_agent=critic_agent,
+    recorder=recorder,
 )
+
+voyager.learn_task("Build a wooden house 4x4 with a door and a gated-fence around it.")
 ```
 
-# Run Voyager for a specific task with a learned skill library
+---
 
-If you want to run Voyager for a specific task with a learned skill library, you should first pass the skill library directory to Voyager:
-```python
-from voyager import Voyager
-
-# First instantiate Voyager with skill_library_dir.
-voyager = Voyager(
-    azure_login=azure_login,
-    openai_api_key=openai_api_key,
-    skill_library_dir="./skill_library/trial1", # Load a learned skill library.
-    ckpt_dir="YOUR_CKPT_DIR", # Feel free to use a new dir. Do not use the same dir as skill library because new events will still be recorded to ckpt_dir. 
-    resume=False, # Do not resume from a skill library because this is not learning.
-)
+## Project Structure
 ```
-Then, you can run task decomposition. Notice: Occasionally, the task decomposition may not be logical. If you notice the printed sub-goals are flawed, you can rerun the decomposition.
-```python
-# Run task decomposition
-task = "YOUR TASK" # e.g. "Craft a diamond pickaxe"
-sub_goals = voyager.decompose_task(task=task)
-```
-Finally, you can run the sub-goals with the learned skill library:
-```python
-voyager.inference(sub_goals=sub_goals)
+├── assets/               # images used in report & README
+├── voyager/              # Co-Voyager source code (adapted from MineDojo/Voyager)
+├── tasks/                # example high-level tasks in JSON
+├── skill_library/        # example learned skills for baseline comparison
+├── installation/         # step-by-step setup guides for Minecraft & Fabric
+├── report.pdf            # full technical report (course submission)
+└── main.py               # minimal reproducible experiment
 ```
 
-For all valid skill libraries, see [Learned Skill Libraries](skill_library/README.md).
+---
 
-# FAQ
-If you have any questions, please check our [FAQ](FAQ.md) first before opening an issue.
+## Experiments & Results
+Co-Voyager was benchmarked against the original Voyager as well as human players on a suite of **construction tasks**.  Key findings:
 
-# Paper and Citation
+* **↑ 3.4×** faster task completion time compared to a single Voyager agent.
+* **↓ 47 %** reduction in total walking distance due to smarter subtask ordering.
+* Comparable performance to human players on simple builds, with superior consistency on complex, multi-step objectives.
 
-If you find our work useful, please consider citing us! 
+<p align="center">
+  <img src="assets/ai_vs_user_time.png" height="220" />
+  <img src="assets/ai_vs_user_walk.png" height="220" />
+</p>
 
+Full details can be found in **report.pdf**.
+
+---
+
+## Citation
+Please cite the original Voyager paper if this project contributes to your research:
 ```bibtex
 @article{wang2023voyager,
   title   = {Voyager: An Open-Ended Embodied Agent with Large Language Models},
-  author  = {Guanzhi Wang and Yuqi Xie and Yunfan Jiang and Ajay Mandlekar and Chaowei Xiao and Yuke Zhu and Linxi Fan and Anima Anandkumar},
+  author  = {Guanzhi Wang et al.},
   year    = {2023},
-  journal = {arXiv preprint arXiv: Arxiv-2305.16291}
+  journal = {arXiv preprint arXiv:2305.16291}
 }
 ```
 
-Disclaimer: This project is strictly for research purposes, and not an official product from NVIDIA.
+---
+
+## License
+This project inherits the original **MIT License** from Voyager. See [LICENSE](LICENSE) for details.
+
+---
+
+## Project Status & Lessons Learned
+Co-Voyager is **not a production-ready system**––it is a proof-of-concept developed for an exam assignment.  Significant effort was spent reverse-engineering and refactoring the original Voyager codebase, which lacked comprehensive documentation.  Key takeaways:
+
+* The repository is now **module-oriented and organized**, making future extensions easier.
+* The initial research goal was to deeply analyse AI-AI and AI-human collaboration with a richer set of statistics beyond *walk* and *time*; however, time constraints limited the study scope.
+
+---
+
+*Co-Voyager is a research prototype: use at your own risk; no official endorsement by NVIDIA, Mojang, or OpenAI.*
